@@ -1,0 +1,36 @@
+name = "internal-sites-template"
+main = "src/index.ts"
+compatibility_date = "2026-06-16"
+compatibility_flags = ["nodejs_compat"]
+
+# Routes for the deploy portal and protected internal sites.
+# routes = [
+#  { pattern = "internal-company.com/deploy*", zone_name = "internal-company.com" },
+#  { pattern = "*.internal-company.com/*", zone_name = "internal-company.com" }
+# ]
+
+workers_dev = true
+
+# Smart Placement
+placement = { mode = "smart" }
+
+# Observability
+[observability.logs]
+enabled = true
+
+[[ dispatch_namespaces ]]
+binding = "dispatcher"
+namespace = "internal-sites-template" # make sure this is the same as the DISPATCH_NAMESPACE_NAME var
+
+[[ d1_databases ]]
+binding = "DB"
+database_name = "internal-sites-template"
+database_id = "b95bb2ca-d8e5-4fcf-9b39-dfd1f18969a0"
+preview_database_id = ""
+
+[vars]
+DISPATCH_NAMESPACE_NAME = "internal-sites-template"
+ACCOUNT_ID = "1e69689b87e13adbc6846c096ff8d7af"
+SITE_DOMAIN = "internal-company.com"
+# Set to "true" only for local development without Cloudflare Access.
+DISABLE_ACCESS_IDENTITY_CHECK = "false"
