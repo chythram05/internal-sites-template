@@ -1,4 +1,4 @@
-# Internal Sites Platform
+# Internal Static Sites Deployment Platform
 
 Deploy an internal drag-and-drop static site platform for your company using [Workers for Platforms](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/). Employees upload files and get a live URL -- every site is protected behind [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/).
 
