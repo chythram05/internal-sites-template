@@ -318,8 +318,19 @@ async function responseForSite(
 		return response;
 	}
 
+	// Decide whether this response is HTML that needs asset-URL rewriting.
+	// Prefer the content-type header, but fall back to the request path since
+	// the dispatched static-asset Worker may omit or vary the header. Requests
+	// ending in "/" resolve to index.html via auto-trailing-slash handling.
 	const contentType = response.headers.get("content-type") || "";
-	if (!contentType.includes("text/html")) {
+	const pathname = new URL(request.url).pathname;
+	const looksLikeHtml =
+		contentType.includes("text/html") ||
+		pathname.endsWith("/") ||
+		pathname.endsWith(".html") ||
+		pathname.endsWith(".htm");
+
+	if (!looksLikeHtml) {
 		return response;
 	}
 
