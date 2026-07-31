@@ -19,7 +19,7 @@ describe("Internal Sites Platform", () => {
 		const body = await response.text();
 		expect(body).toContain("Upload and deploy");
 		expect(body).toContain("Deploy site");
-		expect(body).toContain("Drop a folder or ZIP");
+		expect(body).toContain("Drop a folder. Or a zip.");
 	});
 
 	it("serves the deploy page on workers.dev (testing mode)", async () => {

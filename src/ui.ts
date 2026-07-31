@@ -3,6 +3,10 @@
  *
  * Self-contained HTML, CSS, and JavaScript for the drag-and-drop deploy
  * experience. No build step, no framework -- just template literals.
+ *
+ * The visual design mirrors the Cloudflare Drop-style reference UI: an
+ * orange oklch palette, Inter / Inter Tight typography,
+ * a dotted "drop canvas", soft cards, and pill buttons.
  */
 
 // ── Public renderers ─────────────────────────────────────────────────────────
@@ -11,11 +15,21 @@ export function renderShell(
 	body: string,
 	options: {
 		title?: string;
+		eyebrow?: string;
+		heading?: string;
 		siteDomain?: string;
 		deployPath?: string;
 	} = {},
 ): string {
 	const title = options.title || "Internal Sites";
+	const deployPath = options.deployPath || "/deploy";
+
+	const eyebrow = options.eyebrow
+		? `<p class="eyebrow">${esc(options.eyebrow)}</p>`
+		: "";
+	const heading = options.heading
+		? `<h1 class="display-tight page-title${options.eyebrow ? " has-eyebrow" : ""}">${esc(options.heading)}</h1>`
+		: "";
 
 	return `<!doctype html>
 <html lang="en">
@@ -23,12 +37,25 @@ export function renderShell(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${esc(title)}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>${CSS}</style>
 </head>
 <body>
-  <main class="page">
-    ${body}
-  </main>
+  <div class="page-glow">
+    <header class="site-header">
+      <a href="${esc(deployPath)}" class="brand">Internal Sites</a>
+      <nav class="nav">
+        <a href="${esc(deployPath)}" class="nav-link">Deploy</a>
+      </nav>
+    </header>
+    <main class="page">
+      ${eyebrow}
+      ${heading}
+      ${body}
+    </main>
+  </div>
   <script>
     window.INTERNAL_SITE_DOMAIN = ${JSON.stringify(options.siteDomain || "")};
     window.INTERNAL_DEPLOY_PATH = ${JSON.stringify(options.deployPath || "/deploy")};
@@ -43,62 +70,60 @@ export function renderDeployPage(options: {
 }): string {
 	return renderShell(
 		`
-    <section class="hero">
-      <p class="eyebrow">Internal Sites</p>
-      <h1>Upload and deploy</h1>
-      <p class="lede">Drop a site. Get a URL.</p>
-      <p class="sublede">Upload static files and publish them behind company login.</p>
-    </section>
+    <p class="lede">Drop a site. Get a URL.</p>
+    <p class="sublede">Upload static files and publish them behind company login.</p>
 
-    <section class="panel">
-      <form id="deploy-form">
-        <div class="settings-grid">
-          <label class="field">
-            <span>Site name</span>
-            <input id="site-name" name="name" required placeholder="Team handbook" autocomplete="off">
-          </label>
+    <form id="deploy-form">
+      <div class="settings-grid">
+        <label class="field">
+          <span>Site name</span>
+          <input id="site-name" name="name" required placeholder="Team handbook" autocomplete="off">
+        </label>
 
-          <label class="field">
-            <span>Internal URL</span>
-            <div class="url-row">
-              <input id="site-slug" name="slug" required pattern="[a-z0-9-]+" placeholder="team-handbook" autocomplete="off">
-              <strong>.${esc(options.siteDomain)}</strong>
-            </div>
-          </label>
-        </div>
-
-        <div id="drop-zone" class="upload-card">
-          <input id="file-input" type="file" webkitdirectory multiple hidden>
-          <input id="zip-input" type="file" accept=".zip,application/zip" hidden>
-          <div class="upload-card-header">
-            <strong id="upload-heading">Drop a folder or ZIP here</strong>
-            <button class="remove-button" type="button" id="remove-all" hidden>Remove all</button>
+        <label class="field">
+          <span>Internal URL</span>
+          <div class="url-row">
+            <input id="site-slug" name="slug" required pattern="[a-z0-9-]+" placeholder="team-handbook" autocomplete="off">
+            <strong>.${esc(options.siteDomain)}</strong>
           </div>
-          <div id="empty-state" class="empty-state">
-            <p class="empty-title">Drop a folder or ZIP file here</p>
-            <div class="button-row">
-              <button class="secondary" type="button" id="folder-button">Browse folder</button>
-              <button class="secondary" type="button" id="zip-button">Browse ZIP</button>
-            </div>
-          </div>
-          <div id="file-summary" class="file-list muted" hidden>No files selected.</div>
+        </label>
+      </div>
+
+      <div id="drop-zone" class="drop-canvas">
+        <span class="drop-outline" aria-hidden="true"></span>
+        <h2 class="display-tight drop-title">Drop a folder. Or a zip.</h2>
+        <p class="drop-sub">Static files only &mdash; HTML, CSS, JS. Published behind company login.</p>
+        <div class="drop-actions">
+          <button class="pill-button" type="button" id="folder-button">Browse folders</button>
+          <button class="pill-button" type="button" id="zip-button">Browse zips</button>
         </div>
+        <input id="file-input" type="file" webkitdirectory multiple hidden>
+        <input id="zip-input" type="file" accept=".zip,application/zip" hidden>
+      </div>
 
-        <button id="deploy-button" class="primary" type="submit" disabled>Deploy site</button>
-      </form>
+      <div id="file-card" class="soft-card file-card" hidden>
+        <div class="file-card-header">
+          <h2 id="upload-heading">Uploading 0 total file(s)</h2>
+          <button class="remove-button" type="button" id="remove-all">Remove all</button>
+        </div>
+        <ul id="file-summary" class="file-list"></ul>
+      </div>
 
-      <div id="result" class="result" aria-live="polite"></div>
-    </section>
+      <button id="deploy-button" class="primary" type="submit" disabled>Deploy site</button>
+    </form>
 
-    <section class="note">
+    <div id="result" class="result" aria-live="polite"></div>
+
+    <p class="note">
       <strong>Protected by default.</strong>
       Every site requires company login via Cloudflare Access.
-    </section>
+    </p>
 
     <script>${DEPLOY_SCRIPT}</script>
   `,
 		{
 			title: "Deploy Site",
+			heading: "Upload and deploy",
 			siteDomain: options.siteDomain,
 			deployPath: options.deployPath,
 		},
@@ -111,14 +136,16 @@ export function renderNotFound(
 ): string {
 	return renderShell(
 		`
-    <section class="panel centered">
-      <p class="eyebrow">404</p>
-      <h1>Site not found</h1>
-      <p class="lede">No site is configured for this URL.</p>
-      <a class="link-button" href="${esc(deployPath)}">Deploy a site</a>
-    </section>
+    <p class="lede">No site is configured for this URL.</p>
+    <a class="link-button" href="${esc(deployPath)}">Deploy a site</a>
   `,
-		{ title: "Site not found", siteDomain, deployPath },
+		{
+			title: "Site not found",
+			eyebrow: "404",
+			heading: "Site not found",
+			siteDomain,
+			deployPath,
+		},
 	);
 }
 
@@ -138,19 +165,29 @@ function esc(value: string): string {
 const CSS = `
 :root {
   color-scheme: light;
-  --bg: #fff7ef;
-  --panel: rgba(255, 255, 255, .9);
-  --text: #1f1f1f;
-  --muted: #766d65;
-  --line: #eadfd4;
-  --line-strong: #d9ccbf;
-  --orange: #ff5f1f;
-  --orange-soft: #fff0e6;
-  --sunset: #ffb088;
-  --green: #087f5b;
-  --red: #b42318;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", sans-serif;
+  --radius: 0.625rem;
+  --background: oklch(0.985 0.006 60);
+  --foreground: oklch(0.17 0.005 60);
+  --canvas: oklch(0.68 0.213 39);
+  --canvas-foreground: oklch(0.99 0.005 60);
+  --brand: oklch(0.68 0.213 39);
+  --brand-strong: oklch(0.63 0.226 34);
+  --brand-foreground: oklch(0.99 0.005 60);
+  --success: oklch(0.48 0.117 158);
+  --success-foreground: oklch(0.99 0.005 60);
+  --success-surface: oklch(0.955 0.045 158);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.17 0.005 60);
+  --primary: oklch(0.68 0.213 39);
+  --muted: oklch(0.965 0.008 60);
+  --muted-foreground: oklch(0.52 0.014 55);
+  --accent: oklch(0.955 0.02 55);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-surface: oklch(0.971 0.03 20);
+  --border: oklch(0.9 0.01 60);
+  --font-display: "Inter Tight", "Inter", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
 }
 
 * { box-sizing: border-box; }
@@ -158,368 +195,456 @@ const CSS = `
 
 body {
   margin: 0;
-  background:
-    radial-gradient(circle at 8% -12%, rgba(255, 95, 31, .26), transparent 34rem),
-    radial-gradient(circle at 78% 0%, rgba(255, 176, 136, .28), transparent 32rem),
-    linear-gradient(180deg, #fffaf5 0%, var(--bg) 58%, #fffaf7 100%);
-  color: var(--text);
+  background: var(--background);
+  color: var(--foreground);
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.page {
-  width: min(1040px, calc(100vw - 40px));
+h1, h2, h3, h4, h5, h6 { font-family: var(--font-display); }
+
+/* ── Utilities ─────────────────────────────────────────── */
+
+.page-glow {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse 80% 40% at 50% -10%, var(--canvas-foreground) 0%, transparent 70%),
+    var(--background);
+}
+
+.display-tight {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.soft-card {
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+/* ── Page shell ────────────────────────────────────────── */
+
+.site-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
   margin: 0 auto;
-  padding: 48px 0;
+  max-width: 64rem;
+  padding: 2rem 1.25rem 0;
 }
 
-/* ── Hero ──────────────────────────────────────────────── */
-
-.hero { margin-bottom: 30px; }
-
-.eyebrow {
-  color: var(--orange);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: .14em;
-  margin: 0 0 14px;
+.brand {
+  color: var(--brand);
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  text-decoration: none;
   text-transform: uppercase;
 }
 
-h1 {
-  font-size: clamp(48px, 7vw, 82px);
-  line-height: .92;
-  letter-spacing: -.07em;
-  margin: 0 0 12px;
-  max-width: 900px;
+.nav {
+  align-items: center;
+  display: flex;
+  font-size: 0.875rem;
+  font-weight: 600;
+  gap: 0.25rem;
 }
 
-.lede {
-  color: var(--muted);
-  font-size: clamp(19px, 2.2vw, 26px);
-  line-height: 1.3;
+.nav-link {
+  border-radius: 9999px;
+  color: oklch(0.17 0.005 60 / 0.7);
+  padding: 0.5rem 1rem;
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.nav-link:hover {
+  background: var(--card);
+  color: var(--foreground);
+}
+
+.page {
+  margin: 0 auto;
+  max-width: 64rem;
+  padding: 1.5rem 1.25rem 5rem;
+}
+
+/* ── Page title ────────────────────────────────────────── */
+
+.eyebrow {
+  color: var(--brand);
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
   margin: 0;
-  max-width: 780px;
+  text-transform: uppercase;
+}
+
+.page-title {
+  font-size: clamp(3rem, 7vw, 4.5rem);
+  line-height: 1;
+  margin: 0;
+}
+
+.page-title.has-eyebrow { margin-top: 0.75rem; }
+
+.lede {
+  color: var(--muted-foreground);
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin: 1.25rem 0 0;
 }
 
 .sublede {
-  color: var(--muted);
-  font-size: 18px;
-  line-height: 1.45;
-  margin: 8px 0 0;
-  max-width: 780px;
+  color: var(--muted-foreground);
+  font-size: 1rem;
+  margin: 0.5rem 0 0;
 }
-
-/* ── Panel ─────────────────────────────────────────────── */
-
-.panel {
-  background: transparent;
-  border: 0;
-  padding: 0;
-}
-
-.centered { text-align: center; }
 
 /* ── Settings grid ─────────────────────────────────────── */
 
 .settings-grid {
   display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(0, .95fr) minmax(0, 1.35fr);
-  margin-bottom: 20px;
+  gap: 1.25rem;
+  grid-template-columns: 1fr;
+  margin-top: 2.5rem;
 }
 
-.field { display: block; margin-bottom: 22px; }
-.settings-grid .field { margin-bottom: 0; }
+.field { display: block; }
 
-.field span {
+.field > span {
   display: block;
-  font-size: 14px;
-  font-weight: 750;
-  margin-bottom: 8px;
+  font-size: 0.875rem;
+  font-weight: 700;
 }
 
 input {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  color: var(--foreground);
   font: inherit;
-  font-size: 16px;
+  font-size: 1rem;
+  margin-top: 0.5rem;
   outline: none;
-  padding: 16px 18px;
+  padding: 1rem 1.25rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   width: 100%;
 }
 
+input::placeholder { color: var(--muted-foreground); }
+
 input:focus {
-  border-color: var(--orange);
-  box-shadow: 0 0 0 4px rgba(255, 106, 26, .12);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 4px oklch(0.68 0.213 39 / 0.15);
 }
 
-.url-row { align-items: center; display: flex; gap: 10px; }
-.url-row input { flex: 1; min-width: 0; }
+.url-row {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 0.5rem;
+}
+
+.url-row input { margin-top: 0; min-width: 0; }
+
 .url-row strong {
-  color: var(--muted);
-  font-size: 15px;
-  font-weight: 650;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  font-weight: 700;
   white-space: nowrap;
 }
 
-/* ── Upload card ───────────────────────────────────────── */
+/* ── Drop canvas ───────────────────────────────────────── */
 
-.upload-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  box-shadow: 0 28px 80px rgba(117, 75, 38, .12);
-  overflow: hidden;
-  transition: .15s ease;
+.drop-canvas {
+  background-color: var(--canvas);
+  border-radius: 1.5rem;
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
+    0 20px 50px -12px rgba(246, 130, 31, 0.35);
+  display: grid;
+  margin-top: 2rem;
+  padding: 6rem 1.5rem;
+  place-items: center;
+  position: relative;
+  text-align: center;
+  transition: transform 0.2s ease;
 }
 
-.upload-card.dragging {
-  background: var(--orange-soft);
-  border-color: var(--orange);
+.drop-canvas.dragging { transform: scale(1.01); }
+
+.drop-outline {
+  border: 2px dashed var(--canvas-foreground);
+  border-radius: 1rem;
+  inset: 0.75rem;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 0.2s ease;
 }
 
-.upload-card-header {
-  align-items: center;
-  border-bottom: 1px solid var(--line);
+.drop-canvas.dragging .drop-outline { opacity: 1; }
+
+.drop-title {
+  color: var(--canvas-foreground);
+  font-size: clamp(2.25rem, 5vw, 3rem);
+  margin: 0;
+}
+
+.drop-sub {
+  color: oklch(0.99 0.005 60 / 0.85);
+  margin: 1rem 0 0;
+}
+
+.drop-actions {
   display: flex;
-  justify-content: space-between;
-  min-height: 64px;
-  padding: 0 24px;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 2rem;
 }
 
-.upload-card-header strong {
-  font-size: 20px;
-  font-weight: 750;
+.pill-button {
+  background: var(--card);
+  border: 0;
+  border-radius: 9999px;
+  color: var(--foreground);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 0.75rem 1.75rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  transition: transform 0.15s ease;
+}
+
+.pill-button:hover { transform: translateY(-2px); }
+
+/* ── File list card ────────────────────────────────────── */
+
+.file-card {
+  border-radius: 1.5rem;
+  margin-top: 2rem;
+  overflow: hidden;
+}
+
+.file-card-header {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+}
+
+.file-card-header h2 {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0;
 }
 
 .remove-button {
   background: transparent;
-  color: var(--muted);
-  font-size: 16px;
-  font-weight: 500;
-  padding: 8px;
-}
-
-.remove-button:hover { color: var(--text); }
-
-.empty-state {
-  align-items: center;
-  background: linear-gradient(180deg, rgba(255, 240, 230, .72), rgba(255, 255, 255, .72));
-  border: 1px dashed rgba(255, 95, 31, .34);
-  border-radius: 16px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  margin: 20px;
-  min-height: 220px;
-  padding: 30px;
-  text-align: center;
-}
-
-.empty-title {
-  color: var(--text);
-  font-size: 24px;
-  font-weight: 760;
-  letter-spacing: -.025em;
-  margin: 0 0 8px;
-}
-
-.button-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  justify-content: center;
-}
-
-/* ── Buttons ───────────────────────────────────────────── */
-
-button, .link-button {
   border: 0;
-  border-radius: 14px;
+  color: var(--muted-foreground);
   cursor: pointer;
-  display: inline-block;
   font: inherit;
-  font-weight: 700;
-  padding: 12px 16px;
-  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0;
+  transition: color 0.15s ease;
 }
 
-.primary {
-  background: var(--orange);
-  color: white;
-  font-size: 18px;
-  margin-top: 18px;
-  width: 100%;
-  box-shadow: 0 16px 34px rgba(255, 95, 31, .22);
-}
-
-.primary:disabled { cursor: not-allowed; opacity: .45; }
-
-.secondary {
-  background: white;
-  border: 1px solid rgba(255, 95, 31, .35);
-  color: var(--orange);
-  padding: 11px 15px;
-}
-
-.secondary:hover {
-  background: var(--orange);
-  color: white;
-}
-
-.link-button { background: #1f1f1f; color: white; }
-
-/* ── File list ─────────────────────────────────────────── */
+.remove-button:hover { color: var(--foreground); }
 
 .file-list {
+  list-style: none;
+  margin: 0;
   max-height: 420px;
   overflow: auto;
-  padding: 18px 24px 24px;
+  padding: 0;
 }
 
 .file-row {
   align-items: center;
-  display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  min-height: 38px;
+  display: flex;
+  font-size: 0.875rem;
+  gap: 0.75rem;
+  padding: 0.75rem 1.5rem;
+}
+
+.file-row + .file-row { border-top: 1px solid oklch(0.9 0.01 60 / 0.6); }
+
+.file-icon {
+  color: var(--muted-foreground);
+  flex: 0 0 auto;
+  height: 1rem;
+  width: 1rem;
 }
 
 .file-name {
-  align-items: center;
-  display: flex;
-  gap: 12px;
+  color: var(--foreground);
+  flex: 1 1 auto;
   min-width: 0;
-}
-
-.file-name span:last-child {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.file-icon {
-  color: var(--muted);
-  flex: 0 0 auto;
-  height: 20px;
-  width: 20px;
-}
-
-.folder-chevron {
-  color: var(--muted);
-  display: inline-flex;
-  flex: 0 0 auto;
-  font-size: 23px;
-  line-height: 1;
-  width: 12px;
-}
-
 .file-size {
-  color: var(--muted);
+  color: var(--muted-foreground);
+  flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
-  text-align: right;
-  white-space: nowrap;
 }
 
 .file-check {
-  color: var(--orange);
-  font-size: 23px;
-  line-height: 1;
+  color: var(--brand);
+  flex: 0 0 auto;
+  height: 1rem;
+  width: 1rem;
+}
+
+/* ── Buttons ───────────────────────────────────────────── */
+
+.primary {
+  background: var(--brand);
+  border: 0;
+  border-radius: 9999px;
+  color: var(--brand-foreground);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  margin-top: 1.5rem;
+  padding: 1rem;
+  box-shadow: 0 10px 15px -3px rgba(246, 130, 31, 0.25), 0 4px 6px -4px rgba(246, 130, 31, 0.2);
+  transition: background-color 0.2s ease, opacity 0.2s ease;
+  width: 100%;
+}
+
+.primary:hover:not(:disabled) { background: var(--brand-strong); }
+
+.primary:disabled {
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.link-button {
+  background: var(--foreground);
+  border-radius: 9999px;
+  color: var(--background);
+  display: inline-block;
+  font-weight: 700;
+  margin-top: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  text-decoration: none;
 }
 
 /* ── Result ────────────────────────────────────────────── */
 
-.muted { color: var(--muted); }
-.result { margin-top: 20px; }
-.result-card { border-radius: 18px; padding: 22px; }
+.result:empty { margin: 0; }
+.result { margin-top: 1.5rem; }
+
+.result-card {
+  border-radius: 1.5rem;
+  padding: 1.5rem;
+}
+
 .result-card.success {
-  background: #e8fff6;
-  border: 1px solid #b7ebd5;
-  color: var(--green);
+  background: var(--success-surface);
+  border: 1px solid oklch(0.48 0.117 158 / 0.25);
 }
+
 .result-card.error {
-  background: #fff0ee;
-  border: 1px solid #ffd0cb;
-  color: var(--red);
+  background: var(--destructive-surface);
+  border: 1px solid oklch(0.577 0.245 27.325 / 0.25);
 }
-.result-card a { color: inherit; font-weight: 850; }
 
-.success-url {
-  font-size: 17px;
-  margin: 12px 0;
+.result-title {
+  font-weight: 700;
+  margin: 0;
+}
+
+.result-card.success .result-title { color: var(--success); }
+.result-card.error .result-title { color: var(--destructive); }
+
+.result-url {
+  color: var(--success);
+  display: block;
+  font-weight: 700;
+  margin-top: 0.5rem;
   overflow-wrap: anywhere;
+  text-decoration: underline;
 }
 
-.success-actions {
+.result-card.error p:not(.result-title) {
+  color: var(--destructive);
+  margin: 0.5rem 0 0;
+}
+
+.result-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 16px;
+  gap: 0.75rem;
+  margin-top: 1rem;
 }
 
-.success-actions a,
-.success-actions button {
-  align-items: center;
-  background: #1f1f1f;
-  border: 0;
-  border-radius: 12px;
-  color: white;
-  display: inline-flex;
+.action-primary,
+.action-secondary {
+  border-radius: 9999px;
+  cursor: pointer;
   font: inherit;
-  font-weight: 750;
-  justify-content: center;
-  padding: 11px 14px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  padding: 0.75rem 1.5rem;
   text-decoration: none;
 }
 
-.success-actions button.secondary-action {
-  background: white;
-  border: 1px solid #b7ebd5;
-  color: var(--green);
+.action-primary {
+  background: var(--foreground);
+  border: 0;
+  color: var(--background);
+}
+
+.action-secondary {
+  background: var(--card);
+  border: 1px solid oklch(0.48 0.117 158 / 0.3);
+  color: var(--success);
 }
 
 /* ── Note ──────────────────────────────────────────────── */
 
 .note {
-  color: var(--muted);
-  font-size: 15px;
-  margin-top: 16px;
-  padding-bottom: 8px;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  margin-top: 1.5rem;
 }
 
-/* ── Admin tables ──────────────────────────────────────── */
-
-.dataContainer { margin-top: 24px; overflow-x: auto; }
-.dataTable { border-collapse: collapse; min-width: 100%; }
-.dataTable th, .dataTable td {
-  border-bottom: 1px solid var(--line);
-  padding: 10px;
-  text-align: left;
-  white-space: nowrap;
-}
-.dataTable th {
-  color: var(--muted);
-  font-size: 12px;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
+.note strong { color: var(--foreground); }
 
 /* ── Responsive ────────────────────────────────────────── */
 
+@media (min-width: 640px) {
+  .site-header { padding-left: 2rem; padding-right: 2rem; }
+  .page { padding-left: 2rem; padding-right: 2rem; }
+  .settings-grid { grid-template-columns: 1fr 1fr; }
+}
+
 @media (max-width: 640px) {
-  .page { padding: 32px 0; }
-  .settings-grid { grid-template-columns: 1fr; }
-  .url-row { align-items: stretch; flex-direction: column; }
+  .url-row { grid-template-columns: 1fr; }
   .url-row strong { white-space: normal; }
-  .upload-card-header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
-    padding: 16px;
-  }
-  .empty-state { min-height: 220px; }
+  .drop-canvas { padding: 4rem 1.5rem; }
 }
 `;
 
@@ -530,11 +655,11 @@ const form = document.getElementById("deploy-form");
 const nameInput = document.getElementById("site-name");
 const slugInput = document.getElementById("site-slug");
 const dropZone = document.getElementById("drop-zone");
+const fileCard = document.getElementById("file-card");
 const fileInput = document.getElementById("file-input");
 const zipInput = document.getElementById("zip-input");
 const folderButton = document.getElementById("folder-button");
 const zipButton = document.getElementById("zip-button");
-const emptyState = document.getElementById("empty-state");
 const fileSummary = document.getElementById("file-summary");
 const uploadHeading = document.getElementById("upload-heading");
 const removeAllButton = document.getElementById("remove-all");
@@ -634,11 +759,11 @@ form.addEventListener("submit", async function (event) {
 
     result.innerHTML =
       '<div class="result-card success">' +
-      "<strong>Site deployed.</strong>" +
-      '<p class="success-url"><a href="' + data.url + '" target="_blank" rel="noreferrer">' + data.url + "</a></p>" +
-      '<div class="success-actions">' +
-      '<a href="' + data.url + '" target="_blank" rel="noreferrer">Open site</a>' +
-      '<button class="secondary-action" type="button" id="copy-link">Copy link</button>' +
+      '<p class="result-title">Site deployed.</p>' +
+      '<a class="result-url" href="' + data.url + '" target="_blank" rel="noreferrer">' + data.url + "</a>" +
+      '<div class="result-actions">' +
+      '<a class="action-primary" href="' + data.url + '" target="_blank" rel="noreferrer">Open site</a>' +
+      '<button class="action-secondary" type="button" id="copy-link">Copy link</button>' +
       "</div></div>";
 
     var copyButton = document.getElementById("copy-link");
@@ -651,7 +776,7 @@ form.addEventListener("submit", async function (event) {
     }
   } catch (error) {
     result.innerHTML =
-      '<div class="result-card error"><strong>Deploy failed.</strong><p>' +
+      '<div class="result-card error"><p class="result-title">Deploy failed.</p><p>' +
       escapeHtml(error.message) +
       "</p></div>";
   } finally {
@@ -677,6 +802,7 @@ function clearSelection() {
   isZipSelection = false;
   fileInput.value = "";
   zipInput.value = "";
+  result.innerHTML = "";
   renderFileSummary();
 }
 
@@ -684,18 +810,15 @@ function renderFileSummary() {
   deployButton.disabled = selectedFiles.length === 0;
 
   if (selectedFiles.length === 0) {
-    uploadHeading.textContent = "Drop a folder or ZIP here";
-    emptyState.hidden = false;
-    fileSummary.hidden = true;
+    dropZone.hidden = false;
+    fileCard.hidden = true;
     fileSummary.innerHTML = "";
-    removeAllButton.hidden = true;
     return;
   }
 
+  dropZone.hidden = true;
+  fileCard.hidden = false;
   uploadHeading.textContent = "Uploading " + selectedFiles.length + " total file(s)";
-  emptyState.hidden = true;
-  fileSummary.hidden = false;
-  removeAllButton.hidden = false;
 
   if (isZipSelection) {
     deployButton.disabled = selectedFiles.length !== 1 || !selectedFiles[0].name.toLowerCase().endsWith(".zip");
@@ -708,7 +831,7 @@ function renderFileRows(files, paths) {
   var rows = buildDisplayRows(files, paths);
   var visibleRows = rows.slice(0, 100).map(renderDisplayRow).join("");
   var remaining = rows.length > 100
-    ? '<div class="file-row"><div class="file-name muted">+' + (rows.length - 100) + " more items</div><span></span><span></span></div>"
+    ? '<li class="file-row"><span class="file-name">+' + (rows.length - 100) + " more items</span></li>"
     : "";
   return visibleRows + remaining;
 }
@@ -739,18 +862,23 @@ function buildDisplayRows(files, paths) {
 }
 
 function renderDisplayRow(row) {
-  return '<div class="file-row"><div class="file-name" style="padding-left: ' + (row.depth * 22) + 'px">' +
+  var indent = 1.5 + row.depth * 1.25;
+  return '<li class="file-row" style="padding-left: ' + indent + 'rem">' +
     rowIcon(row.type) +
-    '<span title="' + escapeHtml(row.path) + '">' + escapeHtml(row.name) + "</span></div>" +
+    '<span class="file-name" title="' + escapeHtml(row.path) + '">' + escapeHtml(row.name) + "</span>" +
     '<span class="file-size">' + formatBytes(row.size) + "</span>" +
-    '<span class="file-check">&#10003;</span></div>';
+    checkIcon() + "</li>";
 }
 
 function rowIcon(type) {
   if (type === "folder") {
-    return '<span class="folder-chevron">&#8250;</span><svg class="file-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6.5h6l2 2h10v9.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+    return '<svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>';
   }
-  return '<svg class="file-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 3h7l4 4v14H7V3Z" stroke="currentColor" stroke-width="1.8"/><path d="M14 3v5h5" stroke="currentColor" stroke-width="1.8"/></svg>';
+  return '<svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>';
+}
+
+function checkIcon() {
+  return '<svg class="file-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
 }
 
 // ── Directory traversal ──────────────────────────────────

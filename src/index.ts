@@ -1,8 +1,8 @@
 /**
  * Internal Sites Platform -- main entry point.
  *
- * A Hono application that serves the deploy UI, admin dashboard,
- * deploy API, and dispatches requests to user-deployed static sites
+ * A Hono application that serves the deploy UI, deploy API,
+ * and dispatches requests to user-deployed static sites
  * via Workers for Platforms.
  *
  * Routing mode is auto-detected:
@@ -18,21 +18,18 @@ import {
 	CreateDeployment,
 	CreateSite,
 	DeleteSite,
-	FetchTable,
 	GetSiteBySlug,
 	HasSitesTable,
 	Initialize,
 	UpdateSite,
 } from "./db";
 import type { Env } from "./env";
-import { BuildTable } from "./render";
 import {
 	DeleteScriptInDispatchNamespace,
-	GetScriptsInDispatchNamespace,
 	PutStaticSiteInDispatchNamespace,
 } from "./resource";
 import type { Deployment, Site } from "./types";
-import { renderDeployPage, renderNotFound, renderShell } from "./ui";
+import { renderDeployPage, renderNotFound } from "./ui";
 
 // ── App ──────────────────────────────────────────────────────────────────────
 
@@ -72,47 +69,6 @@ app.get("/deploy", (c) => {
 
 	return c.html(
 		renderDeployPage({
-			siteDomain: siteDomain(c.env),
-			deployPath: deployPath(c.env),
-		}),
-	);
-});
-
-// Admin dashboard
-app.get("/admin", async (c) => {
-	const identity = requireAccessIdentity(c.req.raw, c.env);
-	if (identity instanceof Response) return identity;
-
-	let body = `<section class="panel">
-		<p class="eyebrow">Admin</p>
-		<h1>Internal Sites</h1>
-		<p class="lede">Signed in as ${escapeHtml(identity.email)}</p>`;
-
-	try {
-		body +=
-			'<h2>Sites</h2>' +
-			BuildTable("sites", await FetchTable(c.var.db, "sites"));
-		body +=
-			'<h2>Deployments</h2>' +
-			BuildTable("deployments", await FetchTable(c.var.db, "deployments"));
-	} catch (error) {
-		body += `<p>Could not load admin data: ${escapeHtml(errorMessage(error))}</p>`;
-	}
-
-	try {
-		const scripts = await GetScriptsInDispatchNamespace(c.env);
-		body +=
-			"<h2>Dispatch namespace</h2>" +
-			BuildTable(c.env.DISPATCH_NAMESPACE_NAME, scripts);
-	} catch (error) {
-		body += `<p>Could not load dispatch namespace: ${escapeHtml(errorMessage(error))}</p>`;
-	}
-
-	body += "</section>";
-
-	return c.html(
-		renderShell(body, {
-			title: "Internal Sites Admin",
 			siteDomain: siteDomain(c.env),
 			deployPath: deployPath(c.env),
 		}),
@@ -414,15 +370,6 @@ function deployPath(env: Env): string {
 
 function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : "Unknown error";
-}
-
-function escapeHtml(value: string): string {
-	return value
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&#39;");
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────

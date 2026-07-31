@@ -5,7 +5,7 @@
  * No separate migration step is needed.
  */
 
-import type { Deployment, ResourceRecord, Site } from "./types";
+import type { Deployment, Site } from "./types";
 
 // ── Schema bootstrap ─────────────────────────────────────────────────────────
 
@@ -53,23 +53,6 @@ export async function HasSitesTable(db: D1Database): Promise<boolean> {
 		)
 		.first();
 	return Boolean(row);
-}
-
-// ── Queries ──────────────────────────────────────────────────────────────────
-
-/** Fetch all rows from a known table (admin view). */
-export async function FetchTable(
-	db: D1Database,
-	table: string,
-): Promise<ResourceRecord[]> {
-	if (!["sites", "deployments", "site_acl"].includes(table)) {
-		throw new Error(`Unsupported table: ${table}`);
-	}
-
-	const result = await db
-		.prepare(`SELECT * FROM ${table}`)
-		.all<ResourceRecord>();
-	return result.results || [];
 }
 
 // ── Sites ────────────────────────────────────────────────────────────────────

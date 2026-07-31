@@ -12,7 +12,6 @@ Deploy an internal drag-and-drop static site platform for your company using [Wo
 - **Protected by Access** - Every site sits behind Cloudflare Access. Employees sign in with your company identity provider
 - **Subdomain routing** - Each site gets its own subdomain: `site-name.yourcompany.com`
 - **Works on workers.dev** - Test immediately after deploy, no custom domain required
-- **Admin dashboard** - View all sites, deployments, and dispatch namespace scripts at `/admin`
 - **Deployment tracking** - Tracks who deployed what and when, stored in D1
 - **Re-deploy in place** - Upload to the same slug to update. Only the owner can overwrite
 
@@ -133,7 +132,6 @@ npx wrangler deploy
 │  Platform Worker (this template)                            │
 ├─────────────────────────────────────────────────────────────┤
 │  yourcompany.com/deploy    → Drag & drop deploy UI          │
-│  yourcompany.com/admin     → Admin dashboard                │
 ├─────────────────────────────────────────────────────────────┤
 │  Deployed Sites (Workers for Platforms)                     │
 │  ├── docs.yourcompany.com      → Employee's site            │
@@ -150,7 +148,6 @@ On workers.dev (testing mode), sites use path-based routing instead:
 ```
 your-worker.workers.dev/deploy          → Deploy UI
 your-worker.workers.dev/sites/docs/     → Deployed site
-your-worker.workers.dev/admin           → Admin dashboard
 ```
 
 ---
@@ -178,7 +175,7 @@ http://localhost:8787/sites/site-name/
 | "Could not create asset upload session" | Check that `DISPATCH_NAMESPACE_API_TOKEN` is set with Workers Scripts Edit permission |
 | "Dispatch namespace not found" | Enable [Workers for Platforms](https://dash.cloudflare.com/?to=/:account/workers-for-platforms) and run `npx wrangler dispatch-namespace create internal-sites` |
 | 404 on deployed sites | Ensure uploaded files include `index.html` at the root |
-| Database errors | Visit `/admin` to check status. Tables auto-create on first request |
+| Database errors | Tables auto-create on first request. Check the D1 database in the Cloudflare dashboard |
 
 **View logs:**
 
