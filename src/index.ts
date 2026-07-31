@@ -339,6 +339,14 @@ async function responseForSite(
 	const headers = new Headers(response.headers);
 	headers.delete("content-length");
 
+	// Rebuilding the Response from a string defaults the content-type to
+	// text/plain when the upstream headers omit it, which makes the browser
+	// show the HTML source instead of rendering it. Since we only reach this
+	// point for HTML, set the header explicitly.
+	if (!headers.get("content-type")?.includes("text/html")) {
+		headers.set("content-type", "text/html; charset=utf-8");
+	}
+
 	return new Response(rewrittenHtml, {
 		status: response.status,
 		statusText: response.statusText,
