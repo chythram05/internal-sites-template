@@ -38,3 +38,8 @@ export interface DeployResult {
 	totalBytes: number;
 	manifest: Record<string, { hash: string; size: number }>;
 }
+
+// ── Generic helpers ──────────────────────────────────────────────────────────
+
+export type ResourceValues = string | number | boolean | null;
+export type ResourceRecord = Record<string, ResourceValues>;

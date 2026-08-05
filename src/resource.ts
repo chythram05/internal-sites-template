@@ -52,6 +52,23 @@ const STATIC_ASSET_WORKER = `export default {
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
+/** List all scripts in the dispatch namespace. */
+export async function GetScriptsInDispatchNamespace(env: Env) {
+	const data = (await (
+		await fetch(ScriptsURI(env), {
+			method: "GET",
+			headers: AuthHeaders(env),
+		})
+	).json()) as {
+		result: Array<{
+			id: string;
+			modified_on: string;
+			created_on: string;
+		}>;
+	};
+	return data.result;
+}
+
 /** Delete a script from the dispatch namespace. */
 export async function DeleteScriptInDispatchNamespace(
 	env: Env,

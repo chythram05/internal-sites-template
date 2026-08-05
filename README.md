@@ -13,7 +13,7 @@ Deploy an internal drag-and-drop static site platform for your company using [Wo
 - **Subdomain routing** - Each site gets its own subdomain: `site-name.yourcompany.com`
 - **Works on workers.dev** - Test immediately after deploy, no custom domain required
 - **Deployment tracking** - Tracks who deployed what and when, stored in D1
-- **Re-deploy in place** - Upload to the same slug to update. Only the owner can overwrite
+- **Admin dashboard** - View all deployed sites and deployment history at `/admin`
 
 ## How It Works
 
@@ -57,27 +57,15 @@ After deployment completes:
 
 ### 4. Require company login
 
-Create a Cloudflare Access policy so employees must sign in.
+Protect your Worker with Cloudflare Access so only company employees can access it.
 
-1. Go to [**Zero Trust > Access controls > Applications**](https://dash.cloudflare.com/?to=/:account/one/access-controls/apps)
-2. Click **Create new application** > **Continue with self-hosted and private**
-3. Under **Destinations > Public hostnames**, configure the domain:
-
-   **If using workers.dev (no custom domain):**
-   - **Subdomain**: your Worker name (e.g. `internal-sites-template`)
-   - **Domain**: select your `*.workers.dev` subdomain from the dropdown
-
-   **If using a custom domain:**
-   - **Domain**: select `yourcompany.com` from the dropdown
-   - Click **+ Add public hostname** and add `*.yourcompany.com` to protect deployed sites on subdomains
-
-4. Scroll down to **Access policies** and click **Add a policy**
-5. Name the policy (e.g. "Allow company employees")
-6. Set the action to **Allow**
-7. Add a rule to match your company users:
-   - **Selector**: `Emails ending in` -> `@yourcompany.com`
-   - Or select your identity provider (Google Workspace, Okta, Azure AD, etc.)
-8. Save the policy, then save the application
+1. Go to [**Workers & Pages**](https://dash.cloudflare.com/?to=/:account/workers-and-pages) and select your Worker
+2. Select the **Access** tab
+3. Select **Protect this Worker behind Access**
+4. Choose **All traffic** to keep this Worker and all sites deployed by employees private by default
+5. Under **Authentication policy**, select `Emails ending in` → `@yourcompany.com` to restrict access to your company email domain
+6. Optionally review the session duration
+7. Select **Apply Access**
 
 Every request now requires company login. The platform reads the Access identity header to track who deployed each site.
 
@@ -182,6 +170,17 @@ http://localhost:8787/sites/site-name/
 ```bash
 npx wrangler tail
 ```
+
+---
+
+## Security
+
+The admin page (`/admin`) shows all deployed sites and deployment history. Protect it with [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/):
+
+1. Go to **Zero Trust → Access → Applications**
+2. Click **Create new application** > **Continue with self-hosted and private**
+3. Set the application URL to `your-worker.workers.dev/admin*`
+4. Configure an authentication policy to restrict access to admins only
 
 ---
 

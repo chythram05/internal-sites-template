@@ -48,6 +48,7 @@ export function renderShell(
       <a href="${esc(deployPath)}" class="brand">Internal Sites</a>
       <nav class="nav">
         <a href="${esc(deployPath)}" class="nav-link">Deploy</a>
+        <a href="/admin" class="nav-link">Admin</a>
       </nav>
     </header>
     <main class="page">
@@ -108,6 +109,8 @@ export function renderDeployPage(options: {
         </div>
         <ul id="file-summary" class="file-list"></ul>
       </div>
+
+      <div id="validation" aria-live="polite"></div>
 
       <button id="deploy-button" class="primary" type="submit" disabled>Deploy site</button>
     </form>
@@ -593,6 +596,38 @@ input:focus {
   margin: 0.5rem 0 0;
 }
 
+/* ── Upload validation checklist ───────────────────────── */
+
+#validation:empty { display: none; }
+#validation { margin-top: 1rem; }
+
+.check-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.check-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.check-item .check-icon {
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  width: 1rem;
+  text-align: center;
+}
+
+.check-item.pass { color: var(--success); }
+.check-item.fail { color: var(--destructive); }
+
 .result-actions {
   display: flex;
   flex-wrap: wrap;
@@ -665,6 +700,11 @@ const uploadHeading = document.getElementById("upload-heading");
 const removeAllButton = document.getElementById("remove-all");
 const deployButton = document.getElementById("deploy-button");
 const result = document.getElementById("result");
+const validation = document.getElementById("validation");
+
+var MAX_FILES = 1000;
+var MAX_FILE_BYTES = 25 * 1024 * 1024;  // 25 MiB
+var MAX_TOTAL_BYTES = 50 * 1024 * 1024; // 50 MiB
 
 let selectedFiles = [];
 let selectedPaths = [];
@@ -781,7 +821,8 @@ form.addEventListener("submit", async function (event) {
       "</p></div>";
   } finally {
     deployButton.textContent = "Deploy site";
-    deployButton.disabled = selectedFiles.length === 0;
+    // Re-evaluate validation state (don't just check length — limits may apply)
+    renderFileSummary();
   }
 });
 
@@ -806,25 +847,127 @@ function clearSelection() {
   renderFileSummary();
 }
 
-function renderFileSummary() {
-  deployButton.disabled = selectedFiles.length === 0;
+/**
+ * Compute upload limit violations client-side, mirroring the backend
+ * constants in src/assets.ts. Returns an array of check objects.
+ * For ZIP uploads only the zip file size can be checked; the rest
+ * require the backend to extract and inspect.
+ */
+function computeViolations() {
+  var checks = [];
 
+  if (isZipSelection) {
+    var zipSize = (selectedFiles.length === 1) ? selectedFiles[0].size : 0;
+    checks.push({
+      label: "Total size under " + formatBytes(MAX_TOTAL_BYTES),
+      detail: zipSize > MAX_TOTAL_BYTES ? "zip is " + formatBytes(zipSize) : null,
+      pass: zipSize <= MAX_TOTAL_BYTES
+    });
+    return checks;
+  }
+
+  // File count
+  var count = selectedFiles.length;
+  checks.push({
+    label: "Under " + MAX_FILES.toLocaleString() + " files",
+    detail: count > MAX_FILES ? count.toLocaleString() + " files selected" : null,
+    pass: count <= MAX_FILES
+  });
+
+  // Per-file size + total size + index.html in one pass
+  var totalBytes = 0;
+  var oversizedName = null;
+
+  // Detect common top-level folder (mirrors stripCommonTopLevelFolder in assets.ts)
+  var firstSegments = selectedPaths.map(function (p) {
+    return (p || "").replace(/\\\\/g, "/").split("/")[0];
+  });
+  var commonPrefix = firstSegments[0];
+  var hasCommonPrefix = commonPrefix && firstSegments.every(function (s) { return s === commonPrefix; });
+
+  var hasIndex = false;
+  for (var i = 0; i < selectedFiles.length; i++) {
+    var file = selectedFiles[i];
+    totalBytes += file.size;
+    if (!oversizedName && file.size > MAX_FILE_BYTES) {
+      oversizedName = file.name;
+    }
+    var rawPath = (selectedPaths[i] || file.name).replace(/\\\\/g, "/").replace(/^\\/+/, "");
+    var strippedPath = hasCommonPrefix ? rawPath.split("/").slice(1).join("/") : rawPath;
+    if (strippedPath === "index.html") {
+      hasIndex = true;
+    }
+  }
+
+  // Per-file size
+  checks.push({
+    label: "Max " + formatBytes(MAX_FILE_BYTES) + " per file",
+    detail: oversizedName ? oversizedName + " exceeds limit" : null,
+    pass: !oversizedName
+  });
+
+  // Total size
+  checks.push({
+    label: "Total size under " + formatBytes(MAX_TOTAL_BYTES),
+    detail: totalBytes > MAX_TOTAL_BYTES ? formatBytes(totalBytes) + " selected" : null,
+    pass: totalBytes <= MAX_TOTAL_BYTES
+  });
+
+  // index.html
+  checks.push({
+    label: "index.html present at root",
+    detail: null,
+    pass: hasIndex
+  });
+
+  return checks;
+}
+
+function renderFileSummary() {
   if (selectedFiles.length === 0) {
     dropZone.hidden = false;
     fileCard.hidden = true;
     fileSummary.innerHTML = "";
+    validation.innerHTML = "";
+    deployButton.disabled = true;
     return;
   }
 
   dropZone.hidden = true;
   fileCard.hidden = false;
   uploadHeading.textContent = "Uploading " + selectedFiles.length + " total file(s)";
+  fileSummary.innerHTML = renderFileRows(selectedFiles, selectedPaths);
 
+  // ZIP format check (must be exactly one .zip file)
   if (isZipSelection) {
-    deployButton.disabled = selectedFiles.length !== 1 || !selectedFiles[0].name.toLowerCase().endsWith(".zip");
+    var validZip = selectedFiles.length === 1 && selectedFiles[0].name.toLowerCase().endsWith(".zip");
+    if (!validZip) {
+      validation.innerHTML = "";
+      deployButton.disabled = true;
+      return;
+    }
   }
 
-  fileSummary.innerHTML = renderFileRows(selectedFiles, selectedPaths);
+  var checks = computeViolations();
+  var anyFail = checks.some(function (c) { return !c.pass; });
+
+  if (anyFail) {
+    var items = checks.map(function (c) {
+      var cls = c.pass ? "pass" : "fail";
+      var icon = c.pass ? "&#x2713;" : "&#x2717;";
+      var text = c.label + (c.detail ? " \u2014 " + escapeHtml(c.detail) : "");
+      return '<li class="check-item ' + cls + '"><span class="check-icon">' + icon + '</span>' + text + "</li>";
+    }).join("");
+    validation.innerHTML =
+      '<div class="result-card error">' +
+      '<p class="result-title">Missing requirements</p>' +
+      '<ul class="check-list">' + items + "</ul>" +
+      "</div>";
+    deployButton.disabled = true;
+  } else {
+    validation.innerHTML = "";
+    deployButton.disabled = false;
+  }
 }
 
 function renderFileRows(files, paths) {
