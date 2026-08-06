@@ -668,6 +668,100 @@ input:focus {
 
 .note strong { color: var(--foreground); }
 
+/* ── Admin page ────────────────────────────────────────── */
+
+.admin-signed-in {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  margin: 0.5rem 0 2.5rem;
+}
+
+.admin-section {
+  margin-top: 2.5rem;
+}
+
+.admin-section-label {
+  color: var(--brand);
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0 0 0.75rem;
+  text-transform: uppercase;
+}
+
+.admin-table-wrap {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  overflow: hidden;
+  overflow-x: auto;
+}
+
+.admin-table {
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  min-width: 100%;
+}
+
+.admin-table thead {
+  background: var(--muted);
+}
+
+.admin-table th {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 0.625rem 1rem;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admin-table td {
+  border-top: 1px solid var(--border);
+  color: var(--foreground);
+  padding: 0.75rem 1rem;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.admin-table tbody tr:hover { background: var(--muted); }
+
+.admin-link {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.admin-link:hover { text-decoration: underline; }
+
+.admin-mono {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.admin-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-null { color: var(--muted-foreground); }
+
+.admin-empty {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  margin: 0;
+  padding: 1.25rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+}
+
+.admin-error {
+  color: var(--destructive);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
 /* ── Responsive ────────────────────────────────────────── */
 
 @media (min-width: 640px) {

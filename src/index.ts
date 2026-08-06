@@ -18,6 +18,7 @@ import {
 	CreateDeployment,
 	CreateSite,
 	DeleteSite,
+	FetchDeploymentsWithSites,
 	FetchTable,
 	GetSiteBySlug,
 	HasSitesTable,
@@ -25,7 +26,7 @@ import {
 	UpdateSite,
 } from "./db";
 import type { Env } from "./env";
-import { BuildTable } from "./render";
+import { BuildDeploymentsTable, BuildSitesTable, BuildTable } from "./render";
 import {
 	DeleteScriptInDispatchNamespace,
 	GetScriptsInDispatchNamespace,
@@ -84,36 +85,61 @@ app.get("/admin", async (c) => {
 	const identity = requireAccessIdentity(c.req.raw, c.env);
 	if (identity instanceof Response) return identity;
 
-	let body = `<section class="panel">
-		<p class="eyebrow">Admin</p>
-		<h1>Internal Sites</h1>
-		<p class="lede">Signed in as ${escapeHtml(identity.email)}</p>`;
+	const urlFn = (slug: string) => siteUrl(c.req.raw, c.env, slug);
+
+	let sitesHtml = "";
+	let deploymentsHtml = "";
+	let dispatchHtml = "";
 
 	try {
-		body +=
-			"<h2>Sites</h2>" +
-			BuildTable("sites", await FetchTable(c.var.db, "sites"));
-		body +=
-			"<h2>Deployments</h2>" +
-			BuildTable("deployments", await FetchTable(c.var.db, "deployments"));
+		const sites = await FetchTable(c.var.db, "sites") as unknown as Parameters<typeof BuildSitesTable>[0];
+		sitesHtml = BuildSitesTable(sites, urlFn);
 	} catch (error) {
-		body += `<p>Could not load admin data: ${escapeHtml(errorMessage(error))}</p>`;
+		sitesHtml = `<p class="admin-error">Could not load sites: ${escapeHtml(errorMessage(error))}</p>`;
+	}
+
+	try {
+		const deployments = await FetchDeploymentsWithSites(c.var.db);
+		deploymentsHtml = BuildDeploymentsTable(deployments, urlFn);
+	} catch (error) {
+		deploymentsHtml = `<p class="admin-error">Could not load deployments: ${escapeHtml(errorMessage(error))}</p>`;
 	}
 
 	try {
 		const scripts = await GetScriptsInDispatchNamespace(c.env);
-		body +=
-			"<h2>Dispatch namespace</h2>" +
-			BuildTable(c.env.DISPATCH_NAMESPACE_NAME, scripts);
+		dispatchHtml = BuildTable(
+			c.env.DISPATCH_NAMESPACE_NAME,
+			scripts,
+			["id", "created_on", "modified_on"],
+		);
 	} catch (error) {
-		body += `<p>Could not load dispatch namespace: ${escapeHtml(errorMessage(error))}</p>`;
+		dispatchHtml = `<p class="admin-error">Could not load dispatch namespace: ${escapeHtml(errorMessage(error))}</p>`;
 	}
 
-	body += "</section>";
+	const body = `
+		<p class="admin-signed-in">Signed in as ${escapeHtml(identity.email)}</p>
+
+		<div class="admin-section">
+			<p class="admin-section-label">Sites</p>
+			${sitesHtml}
+		</div>
+
+		<div class="admin-section">
+			<p class="admin-section-label">Deployments</p>
+			${deploymentsHtml}
+		</div>
+
+		<div class="admin-section">
+			<p class="admin-section-label">Dispatch namespace &mdash; ${escapeHtml(c.env.DISPATCH_NAMESPACE_NAME ?? "internal-sites")}</p>
+			${dispatchHtml}
+		</div>
+	`;
 
 	return c.html(
 		renderShell(body, {
-			title: "Internal Sites Admin",
+			title: "Admin — Internal Sites",
+			eyebrow: "Admin",
+			heading: "Internal Sites",
 			siteDomain: siteDomain(c.env),
 			deployPath: deployPath(c.env),
 		}),

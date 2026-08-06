@@ -129,6 +129,34 @@ export async function DeleteSite(
 	await db.prepare("DELETE FROM sites WHERE id = ?").bind(siteId).run();
 }
 
+// ── Admin queries ────────────────────────────────────────────────────────────
+
+export interface DeploymentWithSite {
+	id: string;
+	site_name: string;
+	site_slug: string;
+	file_count: number;
+	total_bytes: number;
+	created_by_email: string;
+	created_at: string;
+}
+
+/** Fetch all deployments joined with their parent site, newest first. */
+export async function FetchDeploymentsWithSites(
+	db: D1Database,
+): Promise<DeploymentWithSite[]> {
+	const result = await db
+		.prepare(
+			`SELECT d.id, s.name as site_name, s.slug as site_slug,
+			        d.file_count, d.total_bytes, d.created_by_email, d.created_at
+			 FROM deployments d
+			 JOIN sites s ON d.site_id = s.id
+			 ORDER BY d.created_at DESC`,
+		)
+		.all<DeploymentWithSite>();
+	return result.results || [];
+}
+
 // ── Deployments ──────────────────────────────────────────────────────────────
 
 export async function CreateDeployment(
