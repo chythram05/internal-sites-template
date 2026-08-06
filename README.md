@@ -175,12 +175,18 @@ npx wrangler tail
 
 ## Security
 
-The admin page (`/admin`) shows all deployed sites and deployment history. Protect it with [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/):
+The admin page (`/admin`) shows all deployed sites and deployment history. Protect it with [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/) so only admins can reach it:
 
 1. Go to **Zero Trust → Access → Applications**
-2. Click **Create new application** > **Continue with self-hosted and private**
-3. Set the application URL to `your-worker.workers.dev/admin*`
-4. Configure an authentication policy to restrict access to admins only
+2. Click **Create new application** → **Continue with self-hosted and private**
+3. Under **Destinations > Public hostnames**, configure your Worker's domain:
+   - **Subdomain**: the name of your Worker (e.g. `internal-sites-template`)
+   - **Domain**: select your `*.workers.dev` domain from the dropdown, or your custom domain if you have one configured
+   - **Path**: `admin*`
+4. Add an Access policy and configure who can access it — for example, restrict to specific admin email addresses
+5. Save the application
+
+This scopes the policy to `/admin*` only, so employees can still reach `/deploy` freely without an additional login step.
 
 ---
 

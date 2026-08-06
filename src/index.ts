@@ -163,7 +163,7 @@ app.post("/api/sites/deploy", async (c) => {
 		// Prevent slug takeover
 		if (existingSite && existingSite.owner_email !== identity.email) {
 			return c.json(
-				{ error: "Site slug is already owned by another user" },
+				{ error: "This site name is already taken. Please choose a different one." },
 				409,
 			);
 		}
