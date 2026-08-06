@@ -1,6 +1,5 @@
 {
 	"name": "internal-sites-template",
-	"version": "1.0.0",
 	"private": true,
 	"description": "Deploy an internal static site platform for your company. Employees drag-and-drop files to publish sites behind Cloudflare Access.",
 	"license": "Apache-2.0",
@@ -9,7 +8,7 @@
 	},
 	"cloudflare": {
 		"label": "Internal Sites Platform",
-		"products": ["Workers", "Workers for Platforms", "D1"],
+		"products": ["Workers for Platforms", "D1", "Access"],
 		"categories": ["starter"],
 		"bindings": {
 			"ACCOUNT_ID": {
@@ -25,6 +24,7 @@
 	},
 	"scripts": {
 		"build": "node scripts/setup.js",
+		"check": "tsc && wrangler deploy --dry-run",
 		"deploy": "wrangler deploy && node scripts/setup.js --set-secrets",
 		"dev": "wrangler dev --remote",
 		"test": "vitest run"
