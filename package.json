@@ -28,9 +28,6 @@
 			},
 			"ACCESS_TEAM_DOMAIN": {
 				"description": "Your Cloudflare One team domain, e.g. `https://mycompany.cloudflareaccess.com`. Find it at https://one.dash.cloudflare.com/?to=/:account/settings"
-			},
-			"ACCESS_AUD": {
-				"description": "(Optional) Application Audience (AUD) Tag from your Access application. Scopes JWT verification to this specific app. Found in Zero Trust > Access > Applications > your app > Additional settings."
 			}
 		}
 	},
