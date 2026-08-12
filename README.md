@@ -19,7 +19,7 @@ Deploy an internal drag-and-drop static site platform for your company using [Wo
 
 1. **Workers for Platforms** - Each deployed site becomes an isolated Worker in a dispatch namespace. The platform routes requests to the correct site Worker
 2. **D1** - Stores site metadata (name, slug, owner, timestamps) and deployment history
-3. **Cloudflare Access** - Enforces company login. The platform reads the `Cf-Access-Authenticated-User-Email` header to identify deployers
+3. **Cloudflare Access** - Enforces company login. The platform verifies the signed JWT from Cloudflare Access to identify deployers
 
 ## Bindings Used
 
@@ -164,24 +164,86 @@ your-worker.workers.dev/sites/docs/     → Deployed site
 
 ## Local Development
 
+### Run tests (no Cloudflare account required)
+
+```bash
+npm test
+```
+
+Unit tests run entirely in Miniflare -- no login, no network, no Cloudflare resources created.
+
+### Full local setup
+
+To deploy test sites from the local UI, you need a Cloudflare account with [Workers for Platforms](https://dash.cloudflare.com/?to=/:account/workers-for-platforms) enabled.
+
+> **What runs where:** The main Worker and D1 database run on your computer via Miniflare. However, deploying a site from the local UI calls the Cloudflare API and **creates a real Worker in your Cloudflare account**. Use `npm test` to avoid creating any real resources.
+
+**1. Sign in to Cloudflare**
+
+```bash
+npx wrangler login
+```
+
+**2. Set your Account ID**
+
+Find your Account ID on the [Cloudflare dashboard](https://dash.cloudflare.com/) (copy from the right sidebar of the account home page). Set it in `wrangler.jsonc`:
+
+```jsonc
+"vars": {
+  "ACCOUNT_ID": "your-account-id"
+}
+```
+
+**3. Create the dispatch namespace**
+
+This is the Workers for Platforms namespace where deployed sites are stored:
+
+```bash
+npx wrangler dispatch-namespace create internal-sites
+```
+
+**4. Create the D1 database**
+
+```bash
+npx wrangler d1 create internal-sites-platform
+```
+
+Copy the `database_id` from the output and paste it into `wrangler.jsonc`:
+
+```jsonc
+"d1_databases": [
+  {
+    "binding": "DB",
+    "database_name": "internal-sites-platform",
+    "database_id": "paste-your-database-id-here"
+  }
+]
+```
+
+**5. Create an API token**
+
+The platform needs a token to deploy Workers into the dispatch namespace:
+
+1. Go to [API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+2. **Create Custom Token** with permission: **Account** > **Workers Scripts** > **Edit**
+3. Copy the token and save it to `.dev.vars`:
+
+```bash
+cp .dev.vars.example .dev.vars
+```
+
+Edit `.dev.vars` and replace `your-token-here` with the real token.
+
+**6. Install and run**
+
 ```bash
 npm install
 npm run dev
 ```
 
-Local dev uses path-based routing automatically:
+Open [http://localhost:8787/deploy](http://localhost:8787/deploy) to use the platform.
 
-```
-http://localhost:8787/sites/site-name/
-```
-
-On localhost, JWT verification is bypassed and a placeholder identity (`local-dev@localhost`) is used automatically. No Cloudflare Access configuration is needed for local development.
-
-To run unit tests (no Cloudflare account required):
-
-```bash
-npm test
-```
+Local dev uses path-based routing automatically (`/sites/site-name/`). JWT verification is bypassed on localhost -- a placeholder identity (`local-dev@localhost`) is used automatically.
 
 ---
 
@@ -194,6 +256,8 @@ npm test
 | "Dispatch namespace not found" | Enable [Workers for Platforms](https://dash.cloudflare.com/?to=/:account/workers-for-platforms) and run `npx wrangler dispatch-namespace create internal-sites` |
 | 404 on deployed sites | Ensure uploaded files include `index.html` at the root |
 | Database errors | Tables auto-create on first request. Check the D1 database in the Cloudflare dashboard |
+| "Access verification is not configured" | Set `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD`. See **Enable JWT verification** above |
+| "Could not delete site from Cloudflare" | Check that `DISPATCH_NAMESPACE_API_TOKEN` is valid and has Workers Scripts Edit permission |
 
 **View logs:**
 
