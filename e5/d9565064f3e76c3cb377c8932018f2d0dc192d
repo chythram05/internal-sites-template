@@ -1,0 +1,31 @@
+package-lock.json
+  s_a111b9aacc0b9f::t_2bad284d2644af 12-13,2584-2592
+src/env.ts
+  s_8abeaae0c9e3e1::t_1e5028bd2b8613 33-48
+wrangler.jsonc
+  s_8abeaae0c9e3e1::t_cb74565feb2ff5 32-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e5d9565064f3e76c3cb377c8932018f2d0dc192d",
+  "prompts": {},
+  "sessions": {
+    "s_8abeaae0c9e3e1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_00d9ceec5ffe45qU1RNAUUzEBl",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "chythra-w1 <chythra-w1@users.noreply.github.com>"
+    },
+    "s_a111b9aacc0b9f": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_0099fe71dffeFVLvTkxTxMagHS",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "chythra-w1 <chythra-w1@users.noreply.github.com>"
+    }
+  }
+}
