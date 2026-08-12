@@ -1,15 +1,95 @@
 import {
 	createExecutionContext,
 	env,
+	fetchMock,
 	waitOnExecutionContext,
 } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
-import app from "../src/index";
+import { exportJWK, generateKeyPair, SignJWT } from "jose";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { resetJwksCache } from "../src/access";
+import app, { resetDbInitialized } from "../src/index";
+
+// ── Test JWT helpers ─────────────────────────────────────────────────────────
+
+const TEST_TEAM_DOMAIN = "https://test-team.cloudflareaccess.com";
+const TEST_AUD = "test-aud-tag-1234567890";
+
+/** Shared key pair generated once before all tests. */
+let testPublicJwk: Record<string, unknown>;
+let testPrivateKey: CryptoKey;
+
+/** Sign a test JWT with the given claims. */
+async function signTestJwt(
+	overrides: Record<string, unknown> = {},
+): Promise<string> {
+	return new SignJWT({
+		email: "employee@company.com",
+		type: "app",
+		...overrides,
+	})
+		.setProtectedHeader({ alg: "RS256", kid: "test-key-id" })
+		.setIssuer(TEST_TEAM_DOMAIN)
+		.setAudience(TEST_AUD)
+		.setExpirationTime("1h")
+		.setIssuedAt()
+		.setSubject("test-user-id")
+		.sign(testPrivateKey);
+}
+
+/** Build an env with Access JWT verification configured. */
+function envWithAccess(extra: Record<string, unknown> = {}) {
+	return {
+		...env,
+		ACCESS_TEAM_DOMAIN: TEST_TEAM_DOMAIN,
+		ACCESS_AUD: TEST_AUD,
+		...extra,
+	};
+}
+
+/** Set up fetchMock to return our test public key at the JWKS endpoint. */
+function mockJwksEndpoint() {
+	fetchMock
+		.get(TEST_TEAM_DOMAIN)
+		.intercept({ path: "/cdn-cgi/access/certs", method: "GET" })
+		.reply(
+			200,
+			JSON.stringify({
+				keys: [testPublicJwk],
+				public_certs: [],
+			}),
+			{ headers: { "content-type": "application/json" } },
+		);
+}
+
+// ── Setup ────────────────────────────────────────────────────────────────────
+
+beforeAll(async () => {
+	// Generate a key pair for signing test JWTs.
+	const pair = await generateKeyPair("RS256");
+	testPrivateKey = pair.privateKey as unknown as CryptoKey;
+	const jwk = await exportJWK(pair.publicKey);
+	testPublicJwk = { ...jwk, kid: "test-key-id", alg: "RS256", use: "sig" };
+
+	// Enable fetchMock for all tests (intercepts outbound fetch).
+	fetchMock.activate();
+	fetchMock.disableNetConnect();
+});
+
+beforeEach(() => {
+	resetDbInitialized();
+	resetJwksCache();
+});
+
+afterEach(() => {
+	fetchMock.assertNoPendingInterceptors();
+});
+
+// ── Tests ────────────────────────────────────────────────────────────────────
 
 describe("Internal Sites Platform", () => {
-	// ── Deploy page ──────────────────────────────────────────────────────
+	// ── Localhost (local dev bypass) ─────────────────────────────────────
 
-	it("serves the deploy page on localhost (testing mode)", async () => {
+	it("serves the deploy page on localhost without JWT", async () => {
 		const request = new Request("http://localhost/deploy");
 		const ctx = createExecutionContext();
 		const response = await app.fetch(request, env, ctx);
@@ -22,38 +102,6 @@ describe("Internal Sites Platform", () => {
 		expect(body).toContain("Drop a folder. Or a zip.");
 	});
 
-	it("serves the deploy page on workers.dev (testing mode)", async () => {
-		const request = new Request(
-			"https://my-worker.my-account.workers.dev/deploy",
-		);
-		const ctx = createExecutionContext();
-		const response = await app.fetch(request, env, ctx);
-		await waitOnExecutionContext(ctx);
-
-		expect(response.status).toBe(200);
-		const body = await response.text();
-		expect(body).toContain("Upload and deploy");
-	});
-
-	it("serves the deploy page with Access identity on custom domain", async () => {
-		const request = new Request("https://mycompany.com/deploy", {
-			headers: {
-				"Cf-Access-Authenticated-User-Email": "test@company.com",
-			},
-		});
-		const customEnv = {
-			...env,
-			SITE_DOMAIN: "mycompany.com",
-		};
-		const ctx = createExecutionContext();
-		const response = await app.fetch(request, customEnv, ctx);
-		await waitOnExecutionContext(ctx);
-
-		expect(response.status).toBe(200);
-		const body = await response.text();
-		expect(body).toContain("Upload and deploy");
-	});
-
 	it("redirects / to /deploy", async () => {
 		const request = new Request("http://localhost/");
 		const ctx = createExecutionContext();
@@ -64,48 +112,18 @@ describe("Internal Sites Platform", () => {
 		expect(response.headers.get("Location")).toBe("/deploy");
 	});
 
-	// ── Access enforcement on custom domain ──────────────────────────────
-
-	it("returns 401 on custom domain without Access identity", async () => {
-		const request = new Request("https://mycompany.com/deploy");
-		const customEnv = {
-			...env,
-			SITE_DOMAIN: "mycompany.com",
-		};
-		const ctx = createExecutionContext();
-		const response = await app.fetch(request, customEnv, ctx);
-		await waitOnExecutionContext(ctx);
-
-		expect(response.status).toBe(401);
-		const body = await response.text();
-		expect(body).toContain("Company sign-in is required");
-	});
-
-	it("returns 401 on custom domain API route without Access identity", async () => {
-		const request = new Request("https://mycompany.com/api/sites/test");
-		const customEnv = {
-			...env,
-			SITE_DOMAIN: "mycompany.com",
-		};
-		const ctx = createExecutionContext();
-		const response = await app.fetch(request, customEnv, ctx);
-		await waitOnExecutionContext(ctx);
-
-		expect(response.status).toBe(401);
-	});
-
-	// ── Testing mode allows access without identity ──────────────────────
-
-	it("allows access on localhost without Access identity", async () => {
-		const request = new Request("http://localhost/deploy");
+	it("returns 204 for favicon.ico", async () => {
+		const request = new Request("http://localhost/favicon.ico");
 		const ctx = createExecutionContext();
 		const response = await app.fetch(request, env, ctx);
 		await waitOnExecutionContext(ctx);
 
-		expect(response.status).toBe(200);
+		expect(response.status).toBe(204);
 	});
 
-	it("allows access on workers.dev without Access identity", async () => {
+	// ── Workers.dev no longer gets a free pass ──────────────────────────
+
+	it("returns 401 on workers.dev without ACCESS vars configured", async () => {
 		const request = new Request(
 			"https://my-worker.my-account.workers.dev/deploy",
 		);
@@ -113,10 +131,113 @@ describe("Internal Sites Platform", () => {
 		const response = await app.fetch(request, env, ctx);
 		await waitOnExecutionContext(ctx);
 
-		expect(response.status).toBe(200);
+		expect(response.status).toBe(401);
+		const body = await response.text();
+		expect(body).toContain("Access verification is not configured");
 	});
 
-	// ── API validation ───────────────────────────────────────────────────
+	it("returns 401 on workers.dev with ACCESS vars but no JWT", async () => {
+		const request = new Request(
+			"https://my-worker.my-account.workers.dev/deploy",
+		);
+		const ctx = createExecutionContext();
+		const response = await app.fetch(request, envWithAccess(), ctx);
+		await waitOnExecutionContext(ctx);
+
+		expect(response.status).toBe(401);
+		const body = await response.text();
+		expect(body).toContain("missing or invalid");
+	});
+
+	// ── Custom domain without Access ────────────────────────────────────
+
+	it("returns 401 on custom domain without ACCESS vars configured", async () => {
+		const request = new Request("https://mycompany.com/deploy");
+		const customEnv = { ...env, SITE_DOMAIN: "mycompany.com" };
+		const ctx = createExecutionContext();
+		const response = await app.fetch(request, customEnv, ctx);
+		await waitOnExecutionContext(ctx);
+
+		expect(response.status).toBe(401);
+		const body = await response.text();
+		expect(body).toContain("Access verification is not configured");
+	});
+
+	it("returns 401 on custom domain API route without JWT", async () => {
+		const request = new Request("https://mycompany.com/api/sites/test");
+		const customEnv = {
+			...env,
+			SITE_DOMAIN: "mycompany.com",
+			ACCESS_TEAM_DOMAIN: TEST_TEAM_DOMAIN,
+			ACCESS_AUD: TEST_AUD,
+		};
+		const ctx = createExecutionContext();
+		const response = await app.fetch(request, customEnv, ctx);
+		await waitOnExecutionContext(ctx);
+
+		expect(response.status).toBe(401);
+	});
+
+	// ── Trusted email header alone is no longer sufficient ──────────────
+
+	it("rejects requests with only the email header (no JWT)", async () => {
+		const request = new Request("https://mycompany.com/deploy", {
+			headers: {
+				"Cf-Access-Authenticated-User-Email": "test@company.com",
+			},
+		});
+		const customEnv = {
+			...env,
+			SITE_DOMAIN: "mycompany.com",
+			ACCESS_TEAM_DOMAIN: TEST_TEAM_DOMAIN,
+			ACCESS_AUD: TEST_AUD,
+		};
+		const ctx = createExecutionContext();
+		const response = await app.fetch(request, customEnv, ctx);
+		await waitOnExecutionContext(ctx);
+
+		expect(response.status).toBe(401);
+		const body = await response.text();
+		expect(body).toContain("missing or invalid");
+	});
+
+	// ── Valid JWT accepted ───────────────────────────────────────────────
+
+	it("serves the deploy page with a valid JWT on workers.dev", async () => {
+		mockJwksEndpoint();
+
+		const token = await signTestJwt();
+		const request = new Request(
+			"https://my-worker.my-account.workers.dev/deploy",
+			{ headers: { "Cf-Access-Jwt-Assertion": token } },
+		);
+		const ctx = createExecutionContext();
+		const response = await app.fetch(request, envWithAccess(), ctx);
+		await waitOnExecutionContext(ctx);
+
+		expect(response.status).toBe(200);
+		const body = await response.text();
+		expect(body).toContain("Upload and deploy");
+	});
+
+	it("serves the deploy page with a valid JWT on custom domain", async () => {
+		mockJwksEndpoint();
+
+		const token = await signTestJwt();
+		const request = new Request("https://mycompany.com/deploy", {
+			headers: { "Cf-Access-Jwt-Assertion": token },
+		});
+		const customEnv = envWithAccess({ SITE_DOMAIN: "mycompany.com" });
+		const ctx = createExecutionContext();
+		const response = await app.fetch(request, customEnv, ctx);
+		await waitOnExecutionContext(ctx);
+
+		expect(response.status).toBe(200);
+		const body = await response.text();
+		expect(body).toContain("Upload and deploy");
+	});
+
+	// ── API validation (localhost, auth bypassed) ────────────────────────
 
 	it("returns 400 when deploying with no files", async () => {
 		const formData = new FormData();
@@ -150,14 +271,99 @@ describe("Internal Sites Platform", () => {
 		expect(data.error).toBe("Site not found");
 	});
 
-	// ── Favicon ──────────────────────────────────────────────────────────
+	// ── Site serving does not touch D1 or require JWT ────────────────────
 
-	it("returns 204 for favicon.ico", async () => {
-		const request = new Request("http://localhost/favicon.ico");
+	it("does not call D1 when loading a site file", async () => {
+		const throwingDb = new Proxy(
+			{},
+			{
+				get(_target, prop) {
+					throw new Error(
+						`D1 should not be called when serving site files, but "${String(prop)}" was accessed`,
+					);
+				},
+			},
+		);
+
+		const mockDispatcher = {
+			get() {
+				throw new Error("Worker not found");
+			},
+		};
+
+		// Request a CSS file via path-based routing on localhost.
+		// The wildcard handler dispatches without auth or D1.
+		const request = new Request(
+			"http://localhost/sites/my-test-site/style.css",
+		);
+		const noDbEnv = {
+			...env,
+			DB: throwingDb as D1Database,
+			dispatcher: mockDispatcher,
+		};
 		const ctx = createExecutionContext();
-		const response = await app.fetch(request, env, ctx);
+		const response = await app.fetch(request, noDbEnv, ctx);
 		await waitOnExecutionContext(ctx);
 
-		expect(response.status).toBe(204);
+		expect(response.status).toBe(404);
+	});
+
+	it("serves site files without JWT on workers.dev (auth at edge)", async () => {
+		const mockDispatcher = {
+			get() {
+				throw new Error("Worker not found");
+			},
+		};
+
+		// No JWT header, no ACCESS vars — site serving still works.
+		const request = new Request(
+			"https://my-worker.my-account.workers.dev/sites/test-site/index.html",
+		);
+		const workerEnv = {
+			...env,
+			dispatcher: mockDispatcher,
+		};
+		const ctx = createExecutionContext();
+		const response = await app.fetch(request, workerEnv, ctx);
+		await waitOnExecutionContext(ctx);
+
+		// 404 from "Worker not found" — not 401. Proves no auth check ran.
+		expect(response.status).toBe(404);
+	});
+
+	// ── Subdomain isolation ──────────────────────────────────────────────
+
+	it("dispatches subdomain requests to site Worker, not platform routes", async () => {
+		let dispatchedSlug: string | null = null;
+		const mockDispatcher = {
+			get(slug: string) {
+				dispatchedSlug = slug;
+				return {
+					fetch: async () =>
+						new Response("<html>site content</html>", {
+							headers: { "content-type": "text/html" },
+						}),
+				};
+			},
+		};
+
+		// Request docs.mycompany.com/deploy — should dispatch to the "docs" site
+		// Worker, NOT serve the deploy page.
+		const request = new Request("https://docs.mycompany.com/deploy");
+		const customEnv = {
+			...env,
+			SITE_DOMAIN: "mycompany.com",
+			dispatcher: mockDispatcher,
+		};
+		const ctx = createExecutionContext();
+		const response = await app.fetch(request, customEnv, ctx);
+		await waitOnExecutionContext(ctx);
+
+		expect(dispatchedSlug).toBe("docs");
+		expect(response.status).toBe(200);
+		const body = await response.text();
+		// Should be the site content, NOT the deploy page
+		expect(body).toContain("site content");
+		expect(body).not.toContain("Upload and deploy");
 	});
 });

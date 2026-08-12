@@ -30,6 +30,22 @@ export interface Env {
 
 	/** Path where the deploy UI is served. Defaults to "/deploy". */
 	DEPLOY_PATH?: string;
+
+	// ── Access JWT verification (optional) ──────────────────────────────
+
+	/**
+	 * Cloudflare One team domain, e.g. "https://mycompany.cloudflareaccess.com".
+	 * Required for JWT verification on non-localhost environments.
+	 * Found in Zero Trust > Settings > Custom Pages.
+	 */
+	ACCESS_TEAM_DOMAIN?: string;
+
+	/**
+	 * Application Audience (AUD) Tag from the Access application.
+	 * Required for JWT verification on non-localhost environments.
+	 * Found in Zero Trust > Access > Applications > your app > Additional settings.
+	 */
+	ACCESS_AUD?: string;
 }
 
 // ── Workers for Platforms types ──────────────────────────────────────────────

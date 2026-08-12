@@ -10,6 +10,7 @@
  *   - Custom domain: subdomain routing (slug.company.com)
  */
 
+import type { Context } from "hono";
 import { Hono } from "hono";
 
 import { isTestingMode, requireAccessIdentity } from "./access";
@@ -37,27 +38,49 @@ import { renderDeployPage, renderNotFound, renderShell } from "./ui";
 
 // ── App ──────────────────────────────────────────────────────────────────────
 
-const app = new Hono<{ Bindings: Env; Variables: { db: D1Database } }>();
+const app = new Hono<{ Bindings: Env }>();
 
-// ── Database auto-init ───────────────────────────────────────────────────────
+// ── Database lazy-init ───────────────────────────────────────────────────────
 
 /**
- * Ensure the database schema exists. Runs a lightweight check on
- * every request (single SELECT on sqlite_master) and only creates
- * tables when they are missing.
+ * Module-level flag so we only check the schema once per isolate lifetime.
+ * D1 is NOT touched on the site-serving path (wildcard handler) — only on
+ * admin and deploy routes that actually need it.
  */
-async function autoInitializeDatabase(db: D1Database): Promise<void> {
+let dbInitialized = false;
+
+async function ensureDb(db: D1Database): Promise<void> {
+	if (dbInitialized) return;
 	if (!(await HasSitesTable(db))) {
 		await Initialize(db);
 	}
+	dbInitialized = true;
 }
 
-// ── Middleware ────────────────────────────────────────────────────────────────
+// ── Subdomain isolation ──────────────────────────────────────────────────────
 
+/**
+ * Intercept requests on site subdomains (slug.company.com) and dispatch
+ * them directly to the site Worker. This runs before any platform routes
+ * so that uploaded site JS can never reach /deploy, /admin, or /api/*.
+ */
 app.use("*", async (c, next) => {
-	c.set("db", c.env.DB);
-	await autoInitializeDatabase(c.var.db);
-	await next();
+	const url = new URL(c.req.url);
+	const domain = siteDomain(c.env);
+
+	if (
+		url.hostname !== domain &&
+		url.hostname.endsWith(`.${domain}`)
+	) {
+		const slug = normalizeSlug(
+			url.hostname.slice(0, -(domain.length + 1)),
+		);
+		if (slug) {
+			return dispatchToSite(c, slug);
+		}
+	}
+
+	return next();
 });
 
 // ── Routes ───────────────────────────────────────────────────────────────────
@@ -67,8 +90,8 @@ app.get("/favicon.ico", () => new Response(null, { status: 204 }));
 app.get("/", (c) => c.redirect(deployPath(c.env)));
 
 // Deploy page
-app.get("/deploy", (c) => {
-	const identity = requireAccessIdentity(c.req.raw, c.env);
+app.get("/deploy", async (c) => {
+	const identity = await requireAccessIdentity(c.req.raw, c.env);
 	if (identity instanceof Response) return identity;
 
 	return c.html(
@@ -82,8 +105,10 @@ app.get("/deploy", (c) => {
 // ── Admin dashboard ──────────────────────────────────────────────────────────
 
 app.get("/admin", async (c) => {
-	const identity = requireAccessIdentity(c.req.raw, c.env);
+	const identity = await requireAccessIdentity(c.req.raw, c.env);
 	if (identity instanceof Response) return identity;
+
+	await ensureDb(c.env.DB);
 
 	const urlFn = (slug: string) => siteUrl(c.req.raw, c.env, slug);
 
@@ -92,14 +117,14 @@ app.get("/admin", async (c) => {
 	let dispatchHtml = "";
 
 	try {
-		const sites = await FetchTable(c.var.db, "sites") as unknown as Parameters<typeof BuildSitesTable>[0];
+		const sites = await FetchTable(c.env.DB, "sites") as unknown as Parameters<typeof BuildSitesTable>[0];
 		sitesHtml = BuildSitesTable(sites, urlFn);
 	} catch (error) {
 		sitesHtml = `<p class="admin-error">Could not load sites: ${escapeHtml(errorMessage(error))}</p>`;
 	}
 
 	try {
-		const deployments = await FetchDeploymentsWithSites(c.var.db);
+		const deployments = await FetchDeploymentsWithSites(c.env.DB);
 		deploymentsHtml = BuildDeploymentsTable(deployments, urlFn);
 	} catch (error) {
 		deploymentsHtml = `<p class="admin-error">Could not load deployments: ${escapeHtml(errorMessage(error))}</p>`;
@@ -149,12 +174,14 @@ app.get("/admin", async (c) => {
 // ── Deploy API ───────────────────────────────────────────────────────────────
 
 app.post("/api/sites/deploy", async (c) => {
-	const identity = requireAccessIdentity(c.req.raw, c.env);
+	const identity = await requireAccessIdentity(c.req.raw, c.env);
 	if (identity instanceof Response) return identity;
+
+	await ensureDb(c.env.DB);
 
 	try {
 		const upload = await parseStaticSiteUpload(c.req.raw);
-		const existingSite = await GetSiteBySlug(c.var.db, upload.slug);
+		const existingSite = await GetSiteBySlug(c.env.DB, upload.slug);
 		const now = new Date().toISOString();
 		const site =
 			existingSite ||
@@ -169,7 +196,7 @@ app.post("/api/sites/deploy", async (c) => {
 		}
 
 		if (!existingSite) {
-			await CreateSite(c.var.db, site);
+			await CreateSite(c.env.DB, site);
 		}
 
 		const deploy = await PutStaticSiteInDispatchNamespace(
@@ -189,8 +216,8 @@ app.post("/api/sites/deploy", async (c) => {
 			created_by_email: identity.email,
 		};
 
-		await CreateDeployment(c.var.db, deployment);
-		await UpdateSite(c.var.db, site.id, {
+		await CreateDeployment(c.env.DB, deployment);
+		await UpdateSite(c.env.DB, site.id, {
 			latest_deployment_id: deployment.id,
 			updated_at: now,
 		});
@@ -214,11 +241,13 @@ app.post("/api/sites/deploy", async (c) => {
 // ── Site info ────────────────────────────────────────────────────────────────
 
 app.get("/api/sites/:slug", async (c) => {
-	const identity = requireAccessIdentity(c.req.raw, c.env);
+	const identity = await requireAccessIdentity(c.req.raw, c.env);
 	if (identity instanceof Response) return identity;
 
+	await ensureDb(c.env.DB);
+
 	const slug = normalizeSlug(c.req.param("slug"));
-	const site = await GetSiteBySlug(c.var.db, slug);
+	const site = await GetSiteBySlug(c.env.DB, slug);
 
 	if (!site) {
 		return c.json({ error: "Site not found" }, 404);
@@ -233,11 +262,13 @@ app.get("/api/sites/:slug", async (c) => {
 // ── Delete site ──────────────────────────────────────────────────────────────
 
 app.delete("/api/sites/:slug", async (c) => {
-	const identity = requireAccessIdentity(c.req.raw, c.env);
+	const identity = await requireAccessIdentity(c.req.raw, c.env);
 	if (identity instanceof Response) return identity;
 
+	await ensureDb(c.env.DB);
+
 	const slug = normalizeSlug(c.req.param("slug"));
-	const site = await GetSiteBySlug(c.var.db, slug);
+	const site = await GetSiteBySlug(c.env.DB, slug);
 
 	if (!site) {
 		return c.json({ error: "Site not found" }, 404);
@@ -248,45 +279,46 @@ app.delete("/api/sites/:slug", async (c) => {
 	}
 
 	await DeleteScriptInDispatchNamespace(c.env, slug);
-	await DeleteSite(c.var.db, site.id);
+	await DeleteSite(c.env.DB, site.id);
 
 	return c.json({ deleted: true });
 });
 
 // ── Wildcard: dispatch to user site ──────────────────────────────────────────
+//
+// No JWT verification here — site viewing relies on Cloudflare Access at the
+// edge. The Worker only verifies JWTs on platform routes (/deploy, /admin, /api/*).
 
 app.get("*", async (c) => {
-	const identity = requireAccessIdentity(c.req.raw, c.env);
-	if (identity instanceof Response) return identity;
-
 	const slug = slugFromRequest(c.req.raw, c.env);
 
 	if (!slug) {
 		return c.redirect(deployPath(c.env));
 	}
 
-	const site = await GetSiteBySlug(c.var.db, slug);
-
-	if (!site) {
-		return c.html(
-			renderNotFound(siteDomain(c.env), deployPath(c.env)),
-			404,
-		);
-	}
-
 	// Redirect /sites/slug to /sites/slug/ in path-based mode
-	if (shouldRedirectPathBasedRoot(c.req.raw, c.env, site.slug)) {
+	if (shouldRedirectPathBasedRoot(c.req.raw, c.env, slug)) {
 		const url = new URL(c.req.url);
 		url.pathname = `${url.pathname}/`;
 		return c.redirect(url.toString(), 308);
 	}
 
+	return dispatchToSite(c, slug);
+});
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Dispatch a request to a deployed site Worker by slug. */
+async function dispatchToSite(
+	c: Context<{ Bindings: Env }>,
+	slug: string,
+): Promise<Response> {
 	try {
-		const worker = c.env.dispatcher.get(site.slug);
+		const worker = c.env.dispatcher.get(slug);
 		const response = await worker.fetch(
-			requestForSite(c.req.raw, c.env, site.slug),
+			requestForSite(c.req.raw, c.env, slug),
 		);
-		return await responseForSite(c.req.raw, c.env, site.slug, response);
+		return await responseForSite(c.req.raw, c.env, slug, response);
 	} catch (error) {
 		if (
 			error instanceof Error &&
@@ -301,9 +333,7 @@ app.get("*", async (c) => {
 		console.error("Dispatch failed", error);
 		return c.text("Could not load internal site", 500);
 	}
-});
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
+}
 
 function buildSite(
 	name: string,
@@ -469,6 +499,13 @@ function escapeHtml(value: string): string {
 		.replace(/>/g, "&gt;")
 		.replace(/"/g, "&quot;")
 		.replace(/'/g, "&#39;");
+}
+
+// ── Test helpers ─────────────────────────────────────────────────────────────
+
+/** Reset the lazy-init flag (used by tests to ensure clean state). */
+export function resetDbInitialized(): void {
+	dbInitialized = false;
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────

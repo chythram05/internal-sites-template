@@ -4,12 +4,18 @@
 	"description": "Deploy an internal static site platform for your company. Employees drag-and-drop files to publish sites behind Cloudflare Access.",
 	"license": "Apache-2.0",
 	"engines": {
-		"node": ">=18"
+		"node": ">=22"
 	},
 	"cloudflare": {
 		"label": "Internal Sites Platform",
-		"products": ["Workers for Platforms", "D1", "Access"],
-		"categories": ["starter"],
+		"products": [
+			"Workers for Platforms",
+			"D1",
+			"Access"
+		],
+		"categories": [
+			"starter"
+		],
 		"bindings": {
 			"ACCOUNT_ID": {
 				"description": "The Account ID for the Cloudflare account you are deploying to. [Open Account Home](https://dash.cloudflare.com/) and select **Copy Account ID** from the menu beside your account name."
@@ -19,6 +25,12 @@
 			},
 			"SITE_DOMAIN": {
 				"description": "Your company's internal domain, e.g. `internal-company.com`. Sites deploy to `site-name.internal-company.com`."
+			},
+			"ACCESS_TEAM_DOMAIN": {
+				"description": "Your Cloudflare One team domain, e.g. `https://mycompany.cloudflareaccess.com`. Found in Zero Trust > Settings > Custom Pages."
+			},
+			"ACCESS_AUD": {
+				"description": "Application Audience (AUD) Tag from your Access application. Found in Zero Trust > Access > Applications > your app > Additional settings."
 			}
 		}
 	},
@@ -31,7 +43,8 @@
 	},
 	"dependencies": {
 		"fflate": "^0.8.2",
-		"hono": "^4.7.0"
+		"hono": "^4.7.0",
+		"jose": "6.2.8"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "0.8.71",

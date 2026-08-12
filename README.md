@@ -67,9 +67,31 @@ Protect your Worker with Cloudflare Access so only company employees can access 
 6. Optionally review the session duration
 7. Select **Apply Access**
 
-Every request now requires company login. The platform reads the Access identity header to track who deployed each site.
+Every request now requires company login.
 
-### 5. Deploy your first site
+### 5. Enable JWT verification
+
+The platform cryptographically verifies each request by checking the signed JWT that Cloudflare Access attaches. This prevents spoofed identity headers.
+
+1. Go to [**Zero Trust**](https://one.dash.cloudflare.com/) > **Access** > **Applications**
+2. Select your application and open **Additional settings**
+3. Copy the **Application Audience (AUD) Tag**
+4. Note your **team domain** from [**Settings**](https://one.dash.cloudflare.com/) > **Custom Pages** (e.g. `https://mycompany.cloudflareaccess.com`)
+5. Set both as Worker environment variables:
+
+```bash
+npx wrangler secret put ACCESS_AUD
+# Paste the AUD tag when prompted
+
+npx wrangler secret put ACCESS_TEAM_DOMAIN
+# Paste the full team domain URL when prompted (e.g. https://mycompany.cloudflareaccess.com)
+```
+
+Alternatively, add them to the `vars` section of `wrangler.jsonc` if you prefer them as plain environment variables.
+
+> **Note:** The platform returns 401 on all non-localhost requests until both `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` are configured. You can always test locally with `npm run dev` without configuring these.
+
+### 6. Deploy your first site
 
 1. Go back to [**Workers & Pages**](https://dash.cloudflare.com/?to=/:account/workers-and-pages) and select your Worker
 2. On the **Overview** tab, click the `workers.dev` link to open the platform
@@ -153,6 +175,14 @@ Local dev uses path-based routing automatically:
 http://localhost:8787/sites/site-name/
 ```
 
+On localhost, JWT verification is bypassed and a placeholder identity (`local-dev@localhost`) is used automatically. No Cloudflare Access configuration is needed for local development.
+
+To run unit tests (no Cloudflare account required):
+
+```bash
+npm test
+```
+
 ---
 
 ## Troubleshooting
@@ -193,7 +223,7 @@ This scopes the policy to `/admin*` only, so employees can still reach `/deploy`
 ## Prerequisites
 
 - **Cloudflare Account** with [Workers for Platforms](https://dash.cloudflare.com/?to=/:account/workers-for-platforms) enabled
-- **Node.js 18+**
+- **Node.js 22+**
 
 ---
 
