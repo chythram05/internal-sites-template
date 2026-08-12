@@ -24,6 +24,7 @@ const PROJECT_ROOT = path.join(__dirname, "..");
 
 // ── Colors ───────────────────────────────────────────────────────────────────
 
+const red = "\x1b[31m";
 const green = "\x1b[32m";
 const yellow = "\x1b[33m";
 const blue = "\x1b[34m";
@@ -213,10 +214,11 @@ function setWranglerSecrets() {
 	const dispatchToken = getVar("DISPATCH_NAMESPACE_API_TOKEN");
 	if (dispatchToken) {
 		try {
-			execSync(
-				`echo "${dispatchToken}" | npx wrangler secret put DISPATCH_NAMESPACE_API_TOKEN`,
-				{ stdio: "pipe", cwd: PROJECT_ROOT },
-			);
+			execSync("npx wrangler secret put DISPATCH_NAMESPACE_API_TOKEN", {
+				input: dispatchToken,
+				stdio: ["pipe", "pipe", "pipe"],
+				cwd: PROJECT_ROOT,
+			});
 			log(green, "  Set DISPATCH_NAMESPACE_API_TOKEN secret.");
 		} catch (error) {
 			log(
@@ -256,9 +258,21 @@ function main() {
 	}
 	console.log("");
 
-	// 2. Create dispatch namespace
-	ensureDispatchNamespace(namespaceName);
+	// 2. Create dispatch namespace (required -- stop if it fails)
+	const nsCreated = ensureDispatchNamespace(namespaceName);
 	console.log("");
+
+	if (!nsCreated) {
+		log(
+			red,
+			"  Setup failed: could not create the dispatch namespace.",
+		);
+		log(
+			red,
+			"  The platform requires Workers for Platforms to be enabled.",
+		);
+		process.exit(1);
+	}
 
 	// 3. Check token
 	if (dispatchToken) {

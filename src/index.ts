@@ -279,7 +279,20 @@ app.delete("/api/sites/:slug", async (c) => {
 		return c.json({ error: "Only the owner can delete this site" }, 403);
 	}
 
-	await DeleteScriptInDispatchNamespace(c.env, slug);
+	// Delete the Worker from Cloudflare first. Only remove the D1 record
+	// after Cloudflare confirms the deletion succeeded.
+	try {
+		await DeleteScriptInDispatchNamespace(c.env, slug);
+	} catch (error) {
+		console.error("Delete from Cloudflare failed", error);
+		return c.json(
+			{
+				error: `Could not delete site from Cloudflare: ${errorMessage(error)}`,
+			},
+			502,
+		);
+	}
+
 	await DeleteSite(c.env.DB, site.id);
 
 	return c.json({ deleted: true });
