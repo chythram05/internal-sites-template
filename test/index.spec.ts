@@ -331,7 +331,54 @@ describe("Internal Sites Platform", () => {
 		expect(response.status).toBe(404);
 	});
 
-	// ── Subdomain isolation ──────────────────────────────────────────────
+	// ── CSRF protection ─────────────────────────────────────────────────
+
+	it("rejects mutating API requests from uploaded site paths", async () => {
+		const formData = new FormData();
+		formData.set("name", "Evil Site");
+		formData.set("slug", "evil");
+		formData.set("paths", "[]");
+
+		// Simulate a POST from JS running inside an uploaded site.
+		const request = new Request("http://localhost/api/sites/deploy", {
+			method: "POST",
+			body: formData,
+			headers: {
+				Referer: "http://localhost/sites/evil-site/index.html",
+			},
+		});
+		const ctx = createExecutionContext();
+		const response = await app.fetch(request, env, ctx);
+		await waitOnExecutionContext(ctx);
+
+		expect(response.status).toBe(403);
+		const data = (await response.json()) as { error: string };
+		expect(data.error).toContain("deployed sites are not allowed");
+	});
+
+	it("allows mutating API requests from the deploy page", async () => {
+		const formData = new FormData();
+		formData.set("name", "Test Site");
+		formData.set("slug", "test-site");
+		formData.set("paths", "[]");
+
+		// Same POST but Referer is the deploy page — should pass CSRF check
+		// and reach the actual handler (which returns 400 due to no files).
+		const request = new Request("http://localhost/api/sites/deploy", {
+			method: "POST",
+			body: formData,
+			headers: {
+				Referer: "http://localhost/deploy",
+			},
+		});
+		const ctx = createExecutionContext();
+		const response = await app.fetch(request, env, ctx);
+		await waitOnExecutionContext(ctx);
+
+		// 400 means it passed the CSRF check and reached the deploy handler,
+		// which rejected it because there are no files — correct behavior.
+		expect(response.status).toBe(400);
+	});
 
 	// ── HTML safety ─────────────────────────────────────────────────────
 

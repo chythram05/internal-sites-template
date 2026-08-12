@@ -172,6 +172,38 @@ app.get("/admin", async (c) => {
 	);
 });
 
+// ── CSRF protection for mutating API routes ──────────────────────────────────
+//
+// On workers.dev (path-based routing), uploaded sites at /sites/slug/ share
+// the same origin as the platform API. Without this check, JS in an uploaded
+// site could POST to /api/sites/deploy or DELETE /api/sites/:slug using the
+// viewer's Access JWT. We reject mutating API requests whose Referer
+// originates from a /sites/ path — that means the request came from an
+// uploaded site, not the platform's own deploy page.
+
+app.use("/api/*", async (c, next) => {
+	if (c.req.method !== "POST" && c.req.method !== "DELETE") {
+		return next();
+	}
+
+	const referer = c.req.header("Referer");
+	if (referer) {
+		try {
+			const refererPath = new URL(referer).pathname;
+			if (refererPath.startsWith("/sites/")) {
+				return c.json(
+					{ error: "Requests from deployed sites are not allowed" },
+					403,
+				);
+			}
+		} catch {
+			// Malformed Referer — allow the request through (same as no Referer).
+		}
+	}
+
+	return next();
+});
+
 // ── Deploy API ───────────────────────────────────────────────────────────────
 
 app.post("/api/sites/deploy", async (c) => {
