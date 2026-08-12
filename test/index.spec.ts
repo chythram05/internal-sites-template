@@ -333,6 +333,28 @@ describe("Internal Sites Platform", () => {
 
 	// ── Subdomain isolation ──────────────────────────────────────────────
 
+	// ── HTML safety ─────────────────────────────────────────────────────
+
+	it("escapes </script> sequences in siteDomain config", async () => {
+		const request = new Request("http://localhost/deploy");
+		const maliciousEnv = {
+			...env,
+			SITE_DOMAIN: '</script><script>alert(1)</script>',
+		};
+		const ctx = createExecutionContext();
+		const response = await app.fetch(request, maliciousEnv, ctx);
+		await waitOnExecutionContext(ctx);
+
+		expect(response.status).toBe(200);
+		const body = await response.text();
+		// The </script> sequence must not appear unescaped in the inline script
+		expect(body).not.toContain('</script><script>alert(1)</script>');
+		// The value should be safely serialized with \u003c
+		expect(body).toContain("\\u003c/script>");
+	});
+
+	// ── Subdomain isolation ──────────────────────────────────────────────
+
 	it("dispatches subdomain requests to site Worker, not platform routes", async () => {
 		let dispatchedSlug: string | null = null;
 		const mockDispatcher = {

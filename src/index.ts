@@ -27,6 +27,7 @@ import {
 	UpdateSite,
 } from "./db";
 import type { Env } from "./env";
+import { escapeHtml } from "./html";
 import { BuildDeploymentsTable, BuildSitesTable, BuildTable } from "./render";
 import {
 	DeleteScriptInDispatchNamespace,
@@ -490,15 +491,6 @@ function deployPath(env: Env): string {
 
 function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : "Unknown error";
-}
-
-function escapeHtml(value: string): string {
-	return value
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&#39;");
 }
 
 // ── Test helpers ─────────────────────────────────────────────────────────────
