@@ -32,7 +32,16 @@ Deploy an internal drag-and-drop static site platform for your company using [Wo
 
 ## Setup
 
-### 1. Create your API token
+### 1. Find your team domain
+
+The platform verifies every request using your Cloudflare Zero Trust team domain. You'll enter this during deployment.
+
+1. Go to [**Zero Trust Settings**](https://one.dash.cloudflare.com/?to=/:account/settings)
+2. Note your **team domain** (e.g. `https://mycompany.cloudflareaccess.com`)
+
+> **Note:** If you don't have a Zero Trust organization yet, one will be created when you first visit the Zero Trust dashboard.
+
+### 2. Create your API token
 
 The platform needs an API token to deploy Workers into the dispatch namespace.
 
@@ -42,11 +51,11 @@ The platform needs an API token to deploy Workers into the dispatch namespace.
 4. Scope it to your account only
 5. Copy the token — you will enter it when prompted during the Deploy to Cloudflare flow
 
-### 2. Deploy the template
+### 3. Deploy the template
 
-Click the **Deploy to Cloudflare** button above and follow the prompts. Paste your API token when asked for `DISPATCH_NAMESPACE_API_TOKEN`.
+Click the **Deploy to Cloudflare** button above and follow the prompts. Enter your **team domain** and **API token** when prompted.
 
-### 3. Enable your Worker URL
+### 4. Enable your Worker URL
 
 After deployment completes:
 
@@ -55,7 +64,7 @@ After deployment completes:
 3. Go to **Settings** > **Domains & Routes**
 4. Under **Worker URL**, click **Enable** and confirm — this enables your `workers.dev` URL
 
-### 4. Require company login
+### 5. Require company login
 
 Protect your Worker with Cloudflare Access so only company employees can access it.
 
@@ -69,27 +78,17 @@ Protect your Worker with Cloudflare Access so only company employees can access 
 
 Every request now requires company login.
 
-### 5. Enable JWT verification
-
-The platform cryptographically verifies each request by checking the signed JWT that Cloudflare Access attaches. This prevents spoofed identity headers.
+**Optional: add audience verification.** For additional security, set `ACCESS_AUD` to scope JWT verification to this specific Access application. This prevents tokens from other Access applications on the same account from being accepted.
 
 1. Go to [**Zero Trust**](https://one.dash.cloudflare.com/) > **Access** > **Applications**
 2. Select your application and open **Additional settings**
 3. Copy the **Application Audience (AUD) Tag**
-4. Note your **team domain** from [**Settings**](https://one.dash.cloudflare.com/) > **Custom Pages** (e.g. `https://mycompany.cloudflareaccess.com`)
-5. Set both as Worker environment variables:
+4. Set it:
 
 ```bash
 npx wrangler secret put ACCESS_AUD
 # Paste the AUD tag when prompted
-
-npx wrangler secret put ACCESS_TEAM_DOMAIN
-# Paste the full team domain URL when prompted (e.g. https://mycompany.cloudflareaccess.com)
 ```
-
-Alternatively, add them to the `vars` section of `wrangler.jsonc` if you prefer them as plain environment variables.
-
-> **Note:** The platform returns 401 on all non-localhost requests until both `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` are configured. You can always test locally with `npm run dev` without configuring these.
 
 ### 6. Deploy your first site
 
@@ -256,7 +255,7 @@ Local dev uses path-based routing automatically (`/sites/site-name/`). JWT verif
 | "Dispatch namespace not found" | Enable [Workers for Platforms](https://dash.cloudflare.com/?to=/:account/workers-for-platforms) and run `npx wrangler dispatch-namespace create internal-sites` |
 | 404 on deployed sites | Ensure uploaded files include `index.html` at the root |
 | Database errors | Tables auto-create on first request. Check the D1 database in the Cloudflare dashboard |
-| "Access verification is not configured" | Set `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD`. See **Enable JWT verification** above |
+| "Access verification is not configured" | Set `ACCESS_TEAM_DOMAIN`. See **Find your team domain** in the Setup section above |
 | "Could not delete site from Cloudflare" | Check that `DISPATCH_NAMESPACE_API_TOKEN` is valid and has Workers Scripts Edit permission |
 
 **View logs:**

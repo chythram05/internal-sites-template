@@ -106,10 +106,14 @@ async function verifyAccessJwt(
 	const teamDomain = normalizeTeamDomain(env.ACCESS_TEAM_DOMAIN || "");
 	const jwks = getJwks(teamDomain);
 
-	const { payload } = await jwtVerify(token, jwks, {
+	const verifyOptions: { issuer: string; audience?: string } = {
 		issuer: teamDomain,
-		audience: env.ACCESS_AUD,
-	});
+	};
+	if (env.ACCESS_AUD) {
+		verifyOptions.audience = env.ACCESS_AUD;
+	}
+
+	const { payload } = await jwtVerify(token, jwks, verifyOptions);
 
 	const email = payload.email as string | undefined;
 	if (!email) {
@@ -152,8 +156,8 @@ export async function getAccessIdentity(
 		return { email: "local-dev@localhost" };
 	}
 
-	// JWT verification requires both env vars
-	if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD) {
+	// JWT verification requires the team domain
+	if (!env.ACCESS_TEAM_DOMAIN) {
 		return null;
 	}
 
@@ -168,8 +172,8 @@ export async function getAccessIdentity(
  * Require a verified identity. Returns the identity or a 401 Response.
  *
  * - localhost: returns a placeholder identity (no JWT needed)
- * - Everywhere else with ACCESS_TEAM_DOMAIN + ACCESS_AUD set: verifies JWT
- * - Everywhere else without those vars: returns 401 with configuration help
+ * - Everywhere else with ACCESS_TEAM_DOMAIN set: verifies JWT
+ * - Everywhere else without ACCESS_TEAM_DOMAIN: returns 401 with configuration help
  */
 export async function requireAccessIdentity(
 	request: Request,
@@ -181,10 +185,11 @@ export async function requireAccessIdentity(
 	}
 
 	// If Access verification is not configured, tell the user how to fix it
-	if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD) {
+	if (!env.ACCESS_TEAM_DOMAIN) {
 		return new Response(
 			"Access verification is not configured.\n\n" +
-				"Set ACCESS_TEAM_DOMAIN and ACCESS_AUD as environment variables.\n" +
+				"Set ACCESS_TEAM_DOMAIN as an environment variable.\n" +
+				"Find your team domain at: https://one.dash.cloudflare.com/?to=/:account/settings\n" +
 				"See the README for setup instructions.",
 			{
 				status: 401,

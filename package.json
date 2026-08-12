@@ -30,7 +30,7 @@
 				"description": "Your Cloudflare One team domain, e.g. `https://mycompany.cloudflareaccess.com`. Found in Zero Trust > Settings > Custom Pages."
 			},
 			"ACCESS_AUD": {
-				"description": "Application Audience (AUD) Tag from your Access application. Found in Zero Trust > Access > Applications > your app > Additional settings."
+				"description": "(Optional) Application Audience (AUD) Tag from your Access application. Scopes JWT verification to this specific app. Found in Zero Trust > Access > Applications > your app > Additional settings."
 			}
 		}
 	},

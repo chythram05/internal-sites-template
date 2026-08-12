@@ -83,9 +83,8 @@ function ensureDispatchNamespace(namespaceName) {
 		const output = stdout + "\n" + stderr;
 
 		if (
-			output.includes("already exists") ||
-			output.includes("A namespace with this name") ||
-			output.includes("namespace with that name already exists")
+			output.includes("already exist") ||
+			output.includes("A namespace with this name")
 		) {
 			log(green, `  Dispatch namespace '${namespaceName}' already exists.`);
 			return true;

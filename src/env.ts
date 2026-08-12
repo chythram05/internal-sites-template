@@ -42,7 +42,8 @@ export interface Env {
 
 	/**
 	 * Application Audience (AUD) Tag from the Access application.
-	 * Required for JWT verification on non-localhost environments.
+	 * Optional -- when set, JWT verification also checks that the token
+	 * was issued for this specific application (recommended).
 	 * Found in Zero Trust > Access > Applications > your app > Additional settings.
 	 */
 	ACCESS_AUD?: string;
