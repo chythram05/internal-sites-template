@@ -250,7 +250,8 @@ Local dev uses path-based routing automatically (`/sites/site-name/`). JWT verif
 
 | Problem | Solution |
 |---------|----------|
-| "Company sign-in is required" | Access is not configured. See **Require company login** in the Setup section above |
+| "Setup required: Enable Cloudflare Access" | Open [Workers & Pages](https://dash.cloudflare.com/?to=/:account/workers-and-pages), select your Worker, and follow **Require company login** in the Setup section above |
+| "Cloudflare Access token could not be verified" | Sign in again. If the problem continues, confirm `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` match your Access application |
 | "Could not create asset upload session" | Check that `DISPATCH_NAMESPACE_API_TOKEN` is set with Workers Scripts Edit permission |
 | "Dispatch namespace not found" | Enable [Workers for Platforms](https://dash.cloudflare.com/?to=/:account/workers-for-platforms) and run `npx wrangler dispatch-namespace create internal-sites` |
 | 404 on deployed sites | Ensure uploaded files include `index.html` at the root |

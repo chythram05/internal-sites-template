@@ -128,7 +128,11 @@ describe("Internal Sites Platform", () => {
 			"https://my-worker.my-account.workers.dev/deploy",
 		);
 		const ctx = createExecutionContext();
-		const response = await app.fetch(request, env, ctx);
+		const response = await app.fetch(
+			request,
+			{ ...env, ACCESS_TEAM_DOMAIN: undefined, ACCESS_AUD: undefined },
+			ctx,
+		);
 		await waitOnExecutionContext(ctx);
 
 		expect(response.status).toBe(401);
@@ -146,14 +150,49 @@ describe("Internal Sites Platform", () => {
 
 		expect(response.status).toBe(401);
 		const body = await response.text();
-		expect(body).toContain("missing or invalid");
+		expect(body).toContain("Setup required: Enable Cloudflare Access");
+		expect(body).toContain(
+			"https://dash.cloudflare.com/?to=/:account/workers-and-pages",
+		);
+		expect(body).toContain("Protect this Worker behind Access");
+		expect(body).not.toContain("Missing Cf-Access-Jwt-Assertion header");
+	});
+
+	it("distinguishes an invalid Access token from missing Access setup", async () => {
+		mockJwksEndpoint();
+
+		const token = await signTestJwt();
+		const request = new Request(
+			"https://my-worker.my-account.workers.dev/deploy",
+			{ headers: { "Cf-Access-Jwt-Assertion": token } },
+		);
+		const ctx = createExecutionContext();
+		const response = await app.fetch(
+			request,
+			envWithAccess({ ACCESS_AUD: "different-audience" }),
+			ctx,
+		);
+		await waitOnExecutionContext(ctx);
+
+		expect(response.status).toBe(401);
+		const body = await response.text();
+		expect(body).toContain(
+			"Your Cloudflare Access token could not be verified",
+		);
+		expect(body).toContain("confirm ACCESS_TEAM_DOMAIN and ACCESS_AUD");
+		expect(body).not.toContain("Setup required: Enable Cloudflare Access");
 	});
 
 	// ── Custom domain without Access ────────────────────────────────────
 
 	it("returns 401 on custom domain without ACCESS vars configured", async () => {
 		const request = new Request("https://mycompany.com/deploy");
-		const customEnv = { ...env, SITE_DOMAIN: "mycompany.com" };
+		const customEnv = {
+			...env,
+			SITE_DOMAIN: "mycompany.com",
+			ACCESS_TEAM_DOMAIN: undefined,
+			ACCESS_AUD: undefined,
+		};
 		const ctx = createExecutionContext();
 		const response = await app.fetch(request, customEnv, ctx);
 		await waitOnExecutionContext(ctx);
@@ -198,7 +237,7 @@ describe("Internal Sites Platform", () => {
 
 		expect(response.status).toBe(401);
 		const body = await response.text();
-		expect(body).toContain("missing or invalid");
+		expect(body).toContain("Setup required: Enable Cloudflare Access");
 	});
 
 	// ── Valid JWT accepted ───────────────────────────────────────────────

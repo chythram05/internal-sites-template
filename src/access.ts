@@ -174,6 +174,7 @@ export async function getAccessIdentity(
  * - localhost: returns a placeholder identity (no JWT needed)
  * - Everywhere else with ACCESS_TEAM_DOMAIN set: verifies JWT
  * - Everywhere else without ACCESS_TEAM_DOMAIN: returns 401 with configuration help
+ * - Everywhere else without an Access token: returns 401 with Access setup help
  */
 export async function requireAccessIdentity(
 	request: Request,
@@ -198,13 +199,32 @@ export async function requireAccessIdentity(
 		);
 	}
 
+	if (!request.headers.get(JWT_HEADER)) {
+		return new Response(
+			"Setup required: Enable Cloudflare Access\n\n" +
+				"Company sign-in cannot be verified because this Worker did not receive a Cloudflare Access token.\n\n" +
+				"To enable Access:\n" +
+				"1. Open Workers & Pages: https://dash.cloudflare.com/?to=/:account/workers-and-pages\n" +
+				"2. Select this Worker and open the Access tab.\n" +
+				'3. Select "Protect this Worker behind Access."\n' +
+				'4. Choose "All traffic," add an Allow policy for your company, and select "Apply Access."\n' +
+				"5. Reload this page and sign in.\n\n" +
+				"If Access is already enabled, confirm that it covers this hostname and path.",
+			{
+				status: 401,
+				headers: { "Content-Type": "text/plain; charset=utf-8" },
+			},
+		);
+	}
+
 	try {
 		return await verifyAccessJwt(request, env);
 	} catch (error) {
 		const detail = error instanceof Error ? error.message : "Unknown error";
 		return new Response(
-			"Company sign-in is required.\n\n" +
-				`Cloudflare Access token is missing or invalid: ${detail}`,
+			"Your Cloudflare Access token could not be verified.\n\n" +
+				"Reload this page and sign in again. If the problem continues, confirm ACCESS_TEAM_DOMAIN and ACCESS_AUD match this Access application.\n\n" +
+				`Technical details: ${detail}`,
 			{
 				status: 401,
 				headers: { "Content-Type": "text/plain; charset=utf-8" },
